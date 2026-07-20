@@ -33,6 +33,7 @@ kotlin {
             implementation(compose.foundation)
             implementation(compose.material3)
             implementation(compose.ui)
+            implementation(libs.compose.ui.backhandler)
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.ktor.client.core)
@@ -69,9 +70,27 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            isUniversalApk = true
+        }
+    }
+    signingConfigs {
+        // Self-signed key for sideloading; replace with a real keystore for Play releases.
+        create("selfSigned") {
+            storeFile = rootProject.file("keystore/pamasahe.jks")
+            storePassword = "pamasahe"
+            keyAlias = "pamasahe"
+            keyPassword = "pamasahe"
+        }
+    }
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("selfSigned")
         }
     }
     compileOptions {

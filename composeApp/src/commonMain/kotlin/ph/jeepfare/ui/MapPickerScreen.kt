@@ -55,11 +55,10 @@ private sealed interface RouteState {
 
 @Composable
 fun MapPickerScreen(
+    osrmClient: OsrmClient,
     onUseDistance: (MapDistance) -> Unit,
     onBack: () -> Unit,
 ) {
-    val osrm = remember { OsrmClient() }
-
     var origin by remember { mutableStateOf<LatLng?>(null) }
     var destination by remember { mutableStateOf<LatLng?>(null) }
     var routeState by remember { mutableStateOf<RouteState>(RouteState.Idle) }
@@ -74,13 +73,15 @@ fun MapPickerScreen(
             RouteState.Idle
         }
         if (currentOrigin != null && currentDestination != null) {
-            routeState = osrm.routeDistanceKm(currentOrigin, currentDestination).fold(
+            // Store the distance rounded to 0.1 km — the same precision it is
+            // displayed with — so the shown km and the charged km never disagree.
+            routeState = osrmClient.routeDistanceKm(currentOrigin, currentDestination).fold(
                 onSuccess = { km ->
-                    RouteState.Ready(MapDistance(km, isEstimate = false), usedFallback = false)
+                    RouteState.Ready(MapDistance(roundToTenth(km), isEstimate = false), usedFallback = false)
                 },
                 onFailure = {
                     val km = estimatedRoadKm(currentOrigin, currentDestination)
-                    RouteState.Ready(MapDistance(km, isEstimate = true), usedFallback = true)
+                    RouteState.Ready(MapDistance(roundToTenth(km), isEstimate = true), usedFallback = true)
                 },
             )
         }
@@ -221,3 +222,5 @@ private fun BottomPanel(
 }
 
 private fun LatLng.toPosition(): Position = Position(longitude = longitude, latitude = latitude)
+
+private fun roundToTenth(km: Double): Double = kotlin.math.round(km * 10) / 10.0

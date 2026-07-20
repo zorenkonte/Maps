@@ -6,13 +6,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.graphics.Color
+import ph.jeepfare.data.OsrmClient
 import ph.jeepfare.domain.JeepneyType
 import ph.jeepfare.domain.PassengerType
 import ph.jeepfare.ui.CalculatorScreen
 import ph.jeepfare.ui.DistanceInputMode
+import ph.jeepfare.ui.MAX_PASSENGERS_PER_TYPE
 import ph.jeepfare.ui.MapDistance
 import ph.jeepfare.ui.MapPickerScreen
 
@@ -22,6 +27,14 @@ private val JeepColors = lightColorScheme(
     tertiary = Color(0xFFB58500), // chrome-trim yellow
 )
 
+private val MapDistanceSaver = listSaver<MapDistance?, Any>(
+    save = { value -> value?.let { listOf(it.distanceKm, it.isEstimate) } ?: emptyList() },
+    restore = { saved ->
+        if (saved.size == 2) MapDistance(saved[0] as Double, saved[1] as Boolean) else null
+    },
+)
+
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun App() {
     MaterialTheme(colorScheme = JeepColors) {
@@ -30,7 +43,13 @@ fun App() {
         var jeepneyType by rememberSaveable { mutableStateOf(JeepneyType.TRADITIONAL) }
         var inputMode by rememberSaveable { mutableStateOf(DistanceInputMode.MAP) }
         var manualKmText by rememberSaveable { mutableStateOf("") }
-        var mapDistance by remember { mutableStateOf<MapDistance?>(null) }
+        var mapDistance by rememberSaveable(stateSaver = MapDistanceSaver) {
+            mutableStateOf<MapDistance?>(null)
+        }
+
+        // One app-scoped client: Ktor engines are heavyweight and OsrmClient has
+        // no close(), so it must not be re-created per map-picker visit.
+        val osrmClient = remember { OsrmClient() }
 
         var regularCount by rememberSaveable { mutableStateOf(1) }
         var studentCount by rememberSaveable { mutableStateOf(0) }
@@ -44,7 +63,7 @@ fun App() {
             PassengerType.PWD to pwdCount,
         )
         val onCountChange: (PassengerType, Int) -> Unit = { type, value ->
-            val clamped = value.coerceIn(0, 30)
+            val clamped = value.coerceIn(0, MAX_PASSENGERS_PER_TYPE)
             when (type) {
                 PassengerType.REGULAR -> regularCount = clamped
                 PassengerType.STUDENT -> studentCount = clamped
@@ -53,8 +72,12 @@ fun App() {
             }
         }
 
+        // System back closes the map picker instead of leaving the app.
+        BackHandler(enabled = showMapPicker) { showMapPicker = false }
+
         if (showMapPicker) {
             MapPickerScreen(
+                osrmClient = osrmClient,
                 onUseDistance = { picked ->
                     mapDistance = picked
                     inputMode = DistanceInputMode.MAP

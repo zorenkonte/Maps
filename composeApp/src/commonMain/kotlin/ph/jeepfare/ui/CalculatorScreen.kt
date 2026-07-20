@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -40,7 +41,15 @@ enum class DistanceInputMode { MAP, MANUAL }
 /** Distance picked from the map, flagged when it is only a straight-line estimate. */
 data class MapDistance(val distanceKm: Double, val isEstimate: Boolean)
 
+const val MAX_PASSENGERS_PER_TYPE = 30
+
+/** Longest accepted trip; well beyond any jeepney route. */
+const val MAX_DISTANCE_KM = 500.0
+
 private const val PESO = "₱"
+
+private fun validDistanceOrNull(km: Double?): Double? =
+    km?.takeIf { it.isFinite() && it >= 0.0 && it <= MAX_DISTANCE_KM }
 
 @Composable
 fun CalculatorScreen(
@@ -57,8 +66,8 @@ fun CalculatorScreen(
 ) {
     val manualKm = manualKmText.replace(',', '.').toDoubleOrNull()
     val distanceKm = when (inputMode) {
-        DistanceInputMode.MAP -> mapDistance?.distanceKm
-        DistanceInputMode.MANUAL -> manualKm?.takeIf { it >= 0.0 && it.isFinite() }
+        DistanceInputMode.MAP -> validDistanceOrNull(mapDistance?.distanceKm)
+        DistanceInputMode.MANUAL -> validDistanceOrNull(manualKm)
     }
     val totalPassengers = passengerCounts.values.sum()
     val breakdown = distanceKm?.takeIf { totalPassengers > 0 }?.let {
@@ -70,6 +79,7 @@ fun CalculatorScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -118,7 +128,9 @@ fun CalculatorScreen(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    isError = manualKmText.isNotBlank() && manualKm == null,
+                    // Must mirror the acceptance filter above, or invalid input
+                    // shows a valid-looking field with no fare and no explanation.
+                    isError = manualKmText.isNotBlank() && validDistanceOrNull(manualKm) == null,
                 )
             }
 
@@ -209,7 +221,10 @@ private fun PassengerRow(type: PassengerType, count: Int, onCountChange: (Int) -
             modifier = Modifier.width(40.dp),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
-        OutlinedButton(onClick = { onCountChange(count + 1) }) { Text("+") }
+        OutlinedButton(
+            onClick = { onCountChange(count + 1) },
+            enabled = count < MAX_PASSENGERS_PER_TYPE,
+        ) { Text("+") }
     }
 }
 

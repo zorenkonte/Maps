@@ -102,6 +102,8 @@ class FareCalculatorTest {
         assertFailsWith<IllegalArgumentException> { calc(-1.0) }
         assertFailsWith<IllegalArgumentException> { calc(Double.NaN) }
         assertFailsWith<IllegalArgumentException> { calc(Double.POSITIVE_INFINITY) }
+        // Absurd distances would saturate the extra-km integer conversion.
+        assertFailsWith<IllegalArgumentException> { calc(FareCalculator.MAX_SUPPORTED_KM + 1) }
     }
 
     @Test

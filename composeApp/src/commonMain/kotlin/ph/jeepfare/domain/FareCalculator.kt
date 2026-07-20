@@ -34,10 +34,13 @@ data class FareBreakdown(
 
 object FareCalculator {
 
+    /** Upper bound guarding the Double→Int conversion in [calculate] from saturating. */
+    const val MAX_SUPPORTED_KM = 100_000.0
+
     /**
      * Computes the itemized fare for a trip.
      *
-     * @param distanceKm trip distance in kilometers; must be finite and >= 0.
+     * @param distanceKm trip distance in kilometers; must be finite, >= 0, and <= [MAX_SUPPORTED_KM].
      * @param jeepneyType traditional or modern PUJ.
      * @param passengers passenger count per category; negative counts are treated as 0.
      */
@@ -46,8 +49,8 @@ object FareCalculator {
         jeepneyType: JeepneyType,
         passengers: Map<PassengerType, Int>,
     ): FareBreakdown {
-        require(distanceKm.isFinite() && distanceKm >= 0.0) {
-            "distanceKm must be a non-negative number, got $distanceKm"
+        require(distanceKm.isFinite() && distanceKm >= 0.0 && distanceKm <= MAX_SUPPORTED_KM) {
+            "distanceKm must be in 0..$MAX_SUPPORTED_KM, got $distanceKm"
         }
         val rate = FareRules.rateFor(jeepneyType)
 
