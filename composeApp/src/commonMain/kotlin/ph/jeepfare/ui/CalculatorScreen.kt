@@ -1,5 +1,6 @@
 package ph.jeepfare.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,20 +10,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -30,11 +26,27 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import ph.jeepfare.domain.FareBreakdown
 import ph.jeepfare.domain.FareCalculator
 import ph.jeepfare.domain.JeepneyType
 import ph.jeepfare.domain.PassengerType
-import ph.jeepfare.domain.toPesoString
+import ph.jeepfare.ui.components.PamButton
+import ph.jeepfare.ui.components.PamButtonSize
+import ph.jeepfare.ui.components.PamButtonVariant
+import ph.jeepfare.ui.components.PamCard
+import ph.jeepfare.ui.components.PamChip
+import ph.jeepfare.ui.components.PamHeroTopBar
+import ph.jeepfare.ui.components.PamIconButton
+import ph.jeepfare.ui.components.PamOverline
+import ph.jeepfare.ui.components.PamSegmentItem
+import ph.jeepfare.ui.components.PamSegmented
+import ph.jeepfare.ui.components.PamStepper
+import ph.jeepfare.ui.components.Resibo
+import ph.jeepfare.ui.theme.LocalPamFonts
+import ph.jeepfare.ui.theme.LocalPamPalette
+import ph.jeepfare.ui.theme.PamIcons
+import ph.jeepfare.ui.theme.PamTone
 
 enum class DistanceInputMode { MAP, MANUAL }
 
@@ -46,10 +58,23 @@ const val MAX_PASSENGERS_PER_TYPE = 30
 /** Longest accepted trip; well beyond any jeepney route. */
 const val MAX_DISTANCE_KM = 500.0
 
-private const val PESO = "₱"
-
 private fun validDistanceOrNull(km: Double?): Double? =
     km?.takeIf { it.isFinite() && it >= 0.0 && it <= MAX_DISTANCE_KM }
+
+/** Per-type signage: icon + tone (screens.jsx TYPES). */
+fun passengerIconFor(type: PassengerType) = when (type) {
+    PassengerType.REGULAR -> PamIcons.Person
+    PassengerType.STUDENT -> PamIcons.School
+    PassengerType.SENIOR -> PamIcons.Elderly
+    PassengerType.PWD -> PamIcons.Accessible
+}
+
+fun passengerToneFor(type: PassengerType) = when (type) {
+    PassengerType.REGULAR -> PamTone.BLUE
+    PassengerType.STUDENT -> PamTone.BLUE
+    PassengerType.SENIOR -> PamTone.YELLOW
+    PassengerType.PWD -> PamTone.RED
+}
 
 @Composable
 fun CalculatorScreen(
@@ -63,7 +88,14 @@ fun CalculatorScreen(
     onPickOnMap: () -> Unit,
     passengerCounts: Map<PassengerType, Int>,
     onPassengerCountChange: (PassengerType, Int) -> Unit,
+    isDark: Boolean,
+    onToggleDark: () -> Unit,
+    onOpenRates: () -> Unit,
+    onShare: (FareBreakdown) -> Unit,
 ) {
+    val pal = LocalPamPalette.current
+    val fonts = LocalPamFonts.current
+
     val manualKm = manualKmText.replace(',', '.').toDoubleOrNull()
     val distanceKm = when (inputMode) {
         DistanceInputMode.MAP -> validDistanceOrNull(mapDistance?.distanceKm)
@@ -74,214 +106,188 @@ fun CalculatorScreen(
         FareCalculator.calculate(it, jeepneyType, passengerCounts)
     }
 
-    Scaffold { padding ->
+    Scaffold(containerColor = pal.bg) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .imePadding()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .verticalScroll(rememberScrollState()),
         ) {
-            Column {
-                Text(Strings.APP_TITLE, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                Text(
-                    Strings.APP_SUBTITLE,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            PamHeroTopBar {
+                // Spec: a single trailing action (theme toggle). The Rates screen is
+                // reached via the tappable LTFRB note at the bottom of this screen.
+                PamIconButton(
+                    if (isDark) PamIcons.LightMode else PamIcons.DarkMode,
+                    contentDescription = Strings.THEME,
+                    onClick = onToggleDark,
                 )
             }
 
-            SectionLabel(Strings.JEEP_TYPE_QUESTION)
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                JeepneyType.entries.forEachIndexed { index, type ->
-                    SegmentedButton(
-                        selected = jeepneyType == type,
-                        onClick = { onJeepneyTypeChange(type) },
-                        shape = SegmentedButtonDefaults.itemShape(index = index, count = JeepneyType.entries.size),
-                    ) {
-                        Text(Strings.jeepneyTypeLabel(type))
-                    }
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                PamCard(overline = Strings.OVERLINE_JEEP) {
+                    PamSegmented(
+                        items = listOf(
+                            PamSegmentItem(
+                                JeepneyType.TRADITIONAL, Strings.jeepneyTypeLabel(JeepneyType.TRADITIONAL),
+                                icon = PamIcons.AirportShuttle, iconTone = PamTone.RED, sub = "₱14 + ₱2/km",
+                            ),
+                            PamSegmentItem(
+                                JeepneyType.MODERN, Strings.jeepneyTypeLabel(JeepneyType.MODERN),
+                                icon = PamIcons.AirportShuttle, iconTone = PamTone.BLUE, sub = "₱17 + ₱2.40/km",
+                            ),
+                        ),
+                        selected = jeepneyType,
+                        onSelect = onJeepneyTypeChange,
+                    )
                 }
-            }
 
-            SectionLabel(Strings.DISTANCE_QUESTION)
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                DistanceInputMode.entries.forEachIndexed { index, mode ->
-                    SegmentedButton(
-                        selected = inputMode == mode,
-                        onClick = { onInputModeChange(mode) },
-                        shape = SegmentedButtonDefaults.itemShape(index = index, count = DistanceInputMode.entries.size),
-                    ) {
-                        Text(if (mode == DistanceInputMode.MAP) Strings.TAB_MAP else Strings.TAB_MANUAL)
-                    }
-                }
-            }
-
-            when (inputMode) {
-                DistanceInputMode.MAP -> MapDistanceSection(mapDistance, onPickOnMap)
-                DistanceInputMode.MANUAL -> OutlinedTextField(
-                    value = manualKmText,
-                    onValueChange = onManualKmTextChange,
-                    label = { Text(Strings.MANUAL_DISTANCE_LABEL) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    // Must mirror the acceptance filter above, or invalid input
-                    // shows a valid-looking field with no fare and no explanation.
-                    isError = manualKmText.isNotBlank() && validDistanceOrNull(manualKm) == null,
-                )
-            }
-
-            SectionLabel(Strings.PASSENGERS_QUESTION)
-            Card {
-                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    PassengerType.entries.forEach { type ->
-                        PassengerRow(
-                            type = type,
-                            count = passengerCounts[type] ?: 0,
-                            onCountChange = { onPassengerCountChange(type, it) },
+                PamCard(overline = Strings.OVERLINE_DISTANCE) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        PamSegmented(
+                            items = listOf(
+                                PamSegmentItem(DistanceInputMode.MAP, Strings.TAB_MAP, icon = PamIcons.Map, iconTone = PamTone.BLUE),
+                                PamSegmentItem(DistanceInputMode.MANUAL, Strings.TAB_MANUAL, icon = PamIcons.Edit, iconTone = PamTone.BLUE),
+                            ),
+                            selected = inputMode,
+                            onSelect = onInputModeChange,
                         )
+                        when (inputMode) {
+                            DistanceInputMode.MAP -> MapDistanceSection(mapDistance, onPickOnMap)
+                            DistanceInputMode.MANUAL -> ManualDistanceSection(manualKmText, manualKm, onManualKmTextChange)
+                        }
                     }
                 }
-            }
 
-            when {
-                breakdown != null -> BreakdownCard(breakdown)
-                totalPassengers == 0 -> HintText(Strings.NO_PASSENGERS_PROMPT)
-                else -> HintText(Strings.ENTER_DISTANCE_PROMPT)
-            }
+                PamCard(
+                    overline = Strings.OVERLINE_PASSENGERS,
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                ) {
+                    Column {
+                        PassengerType.entries.forEachIndexed { index, type ->
+                            if (index > 0) HorizontalDivider(thickness = 1.5.dp, color = pal.line)
+                            PamStepper(
+                                icon = passengerIconFor(type),
+                                tone = passengerToneFor(type),
+                                label = Strings.passengerTypeLabel(type),
+                                chip = if (type.discounted) Strings.DISCOUNT_CHIP else null,
+                                value = passengerCounts[type] ?: 0,
+                                onValueChange = { onPassengerCountChange(type, it) },
+                                max = MAX_PASSENGERS_PER_TYPE,
+                            )
+                        }
+                    }
+                }
 
-            Text(
-                Strings.FARE_MATRIX_NOTE,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(8.dp))
+                PamOverline(Strings.OVERLINE_BREAKDOWN)
+
+                if (breakdown != null) {
+                    val (rows, dividerAt) = resiboRows(breakdown)
+                    Resibo(
+                        header = Strings.RESIBO_HEADER,
+                        sub = "${Strings.jeepneyTypeLong(jeepneyType)} · ${formatKm(breakdown.distanceKm)} km",
+                        rows = rows,
+                        dividerBeforeIndex = dividerAt,
+                        totalLabel = Strings.RESIBO_TOTAL,
+                        totalValue = breakdown.total.peso(),
+                        footer = Strings.RESIBO_FOOTER,
+                    )
+                    PamButton(
+                        Strings.SHARE_RESIBO,
+                        onClick = { onShare(breakdown) },
+                        icon = PamIcons.Share,
+                        size = PamButtonSize.LG,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                } else {
+                    Text(
+                        if (totalPassengers == 0) Strings.NO_PASSENGERS_PROMPT else Strings.ENTER_DISTANCE_PROMPT,
+                        fontFamily = fonts.body, fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
+                        color = pal.ink2,
+                    )
+                }
+
+                Text(
+                    Strings.FARE_MATRIX_NOTE,
+                    fontFamily = fonts.body, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = pal.ink2,
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .clickable(onClick = onOpenRates)
+                        .padding(4.dp),
+                )
+                Spacer(Modifier.height(12.dp))
+            }
         }
     }
-}
-
-@Composable
-private fun SectionLabel(text: String) {
-    Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-}
-
-@Composable
-private fun HintText(text: String) {
-    Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable
 private fun MapDistanceSection(mapDistance: MapDistance?, onPickOnMap: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (mapDistance == null) {
-            HintText(Strings.NO_DISTANCE_YET)
-        } else {
+    val pal = LocalPamPalette.current
+    val fonts = LocalPamFonts.current
+    if (mapDistance == null) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                Strings.NO_DISTANCE_YET,
+                fontFamily = fonts.body, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = pal.ink2,
+                modifier = Modifier.weight(1f),
+            )
+            PamButton(
+                Strings.OPEN_MAP, onClick = onPickOnMap, icon = PamIcons.Map,
+                variant = PamButtonVariant.SECONDARY, size = PamButtonSize.SM,
+            )
+        }
+    } else {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(PamIcons.MyLocation, contentDescription = null, tint = pal.green, modifier = Modifier.height(20.dp))
+            Text(
+                Strings.ROUTE_FROM_MAP,
+                fontFamily = fonts.body, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = pal.ink,
+                modifier = Modifier.weight(1f), maxLines = 1,
+            )
             Text(
                 "${formatKm(mapDistance.distanceKm)} km",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
+                fontFamily = fonts.mono, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = pal.ink,
             )
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
             if (mapDistance.isEstimate) {
-                Text(
-                    Strings.ESTIMATE_NOTE,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.tertiary,
-                )
+                PamChip(Strings.CHIP_ESTIMATE, tone = PamTone.YELLOW, icon = PamIcons.SignalWifiOff)
+            } else {
+                PamChip(Strings.CHIP_OSRM, tone = PamTone.GREEN, icon = PamIcons.Route)
             }
-        }
-        OutlinedButton(onClick = onPickOnMap) {
-            Text(if (mapDistance == null) Strings.PICK_ON_MAP else Strings.CHANGE_ON_MAP)
-        }
-    }
-}
-
-@Composable
-private fun PassengerRow(type: PassengerType, count: Int, onCountChange: (Int) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(Strings.passengerTypeLabel(type), style = MaterialTheme.typography.bodyLarge)
-            if (type.discounted) {
-                Text(
-                    Strings.DISCOUNT_LABEL,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.secondary,
-                )
-            }
-        }
-        OutlinedButton(onClick = { onCountChange(count - 1) }, enabled = count > 0) { Text("−") }
-        Text(
-            "$count",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.width(40.dp),
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-        )
-        OutlinedButton(
-            onClick = { onCountChange(count + 1) },
-            enabled = count < MAX_PASSENGERS_PER_TYPE,
-        ) { Text("+") }
-    }
-}
-
-@Composable
-private fun BreakdownCard(breakdown: FareBreakdown) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(Strings.BREAKDOWN_TITLE, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-
-            BreakdownRow(
-                Strings.BASE_FARE_LABEL.replace("%d", breakdown.rate.baseKm.toString()),
-                "$PESO${breakdown.rate.baseFare.toPesoString()}",
+            Spacer(Modifier.weight(1f))
+            PamButton(
+                Strings.OPEN_MAP, onClick = onPickOnMap, icon = PamIcons.Map,
+                variant = PamButtonVariant.SECONDARY, size = PamButtonSize.SM,
             )
-            if (breakdown.extraKm > 0) {
-                BreakdownRow(
-                    "${Strings.EXTRA_LABEL}: ${breakdown.extraKm} km × $PESO${breakdown.rate.perKm.toPesoString()}",
-                    "$PESO${breakdown.extraCharge.toPesoString()}",
-                )
-            }
-            HorizontalDivider()
-
-            breakdown.passengers.forEach { line ->
-                val fareText = "$PESO${line.farePerHead.toPesoString()} ${Strings.PER_HEAD}"
-                BreakdownRow(
-                    "${line.count}× ${Strings.passengerTypeLabel(line.type)} ($fareText)",
-                    "$PESO${line.subtotal.toPesoString()}",
-                )
-            }
-            HorizontalDivider()
-
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    Strings.TOTAL_LABEL,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    "$PESO${breakdown.total.toPesoString()}",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
         }
     }
 }
 
 @Composable
-private fun BreakdownRow(label: String, amount: String) {
-    Row(modifier = Modifier.fillMaxWidth()) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        Text(amount, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-    }
-}
-
-internal fun formatKm(km: Double): String {
-    val tenths = kotlin.math.round(km * 10).toLong()
-    return "${tenths / 10}.${kotlin.math.abs(tenths % 10)}"
+private fun ManualDistanceSection(manualKmText: String, manualKm: Double?, onManualKmTextChange: (String) -> Unit) {
+    val pal = LocalPamPalette.current
+    val fonts = LocalPamFonts.current
+    OutlinedTextField(
+        value = manualKmText,
+        onValueChange = onManualKmTextChange,
+        label = { Text(Strings.MANUAL_DISTANCE_LABEL) },
+        suffix = { Text("km", fontFamily = fonts.mono, color = pal.ink2) },
+        supportingText = { Text(Strings.MANUAL_HINT) },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        singleLine = true,
+        shape = RoundedCornerShape(14.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = pal.focus,
+            unfocusedBorderColor = pal.line2,
+        ),
+        modifier = Modifier.fillMaxWidth(),
+        // Must mirror the acceptance filter, or invalid input shows a
+        // valid-looking field with no fare and no explanation.
+        isError = manualKmText.isNotBlank() && validDistanceOrNull(manualKm) == null,
+    )
 }
