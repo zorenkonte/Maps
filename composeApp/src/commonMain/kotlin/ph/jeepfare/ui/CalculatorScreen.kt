@@ -115,14 +115,13 @@ fun CalculatorScreen(
                 .verticalScroll(rememberScrollState()),
         ) {
             PamHeroTopBar {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PamIconButton(PamIcons.ReceiptLong, contentDescription = Strings.RATES_TITLE, onClick = onOpenRates)
-                    PamIconButton(
-                        if (isDark) PamIcons.LightMode else PamIcons.DarkMode,
-                        contentDescription = Strings.THEME,
-                        onClick = onToggleDark,
-                    )
-                }
+                // Spec: a single trailing action (theme toggle). The Rates screen is
+                // reached via the tappable LTFRB note at the bottom of this screen.
+                PamIconButton(
+                    if (isDark) PamIcons.LightMode else PamIcons.DarkMode,
+                    contentDescription = Strings.THEME,
+                    onClick = onToggleDark,
+                )
             }
 
             Column(
@@ -163,7 +162,10 @@ fun CalculatorScreen(
                     }
                 }
 
-                PamCard(overline = Strings.OVERLINE_PASSENGERS, contentPadding = 12.dp) {
+                PamCard(
+                    overline = Strings.OVERLINE_PASSENGERS,
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                ) {
                     Column {
                         PassengerType.entries.forEachIndexed { index, type ->
                             if (index > 0) HorizontalDivider(thickness = 1.5.dp, color = pal.line)

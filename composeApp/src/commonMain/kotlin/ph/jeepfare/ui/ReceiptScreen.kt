@@ -47,7 +47,14 @@ fun ReceiptScreen(breakdown: FareBreakdown, onBack: () -> Unit) {
     val shareText = rememberShareText()
     val clipboard = LocalClipboardManager.current
     val dateLabel = remember { currentDateLabel() }
-    var copied by remember { mutableStateOf(false) }
+    var saved by remember { mutableStateOf(false) }
+    // "Na-save!" is transient feedback, not a permanent label change.
+    androidx.compose.runtime.LaunchedEffect(saved) {
+        if (saved) {
+            kotlinx.coroutines.delay(2000)
+            saved = false
+        }
+    }
 
     val (rows, dividerAt) = resiboRows(breakdown)
     val allRows = listOf(ResiboRow(dateLabel, "", muted = true)) + rows
@@ -88,10 +95,12 @@ fun ReceiptScreen(breakdown: FareBreakdown, onBack: () -> Unit) {
                         modifier = Modifier.weight(1f),
                     )
                     PamButton(
-                        if (copied) Strings.COPIED else Strings.COPY,
+                        if (saved) Strings.SAVED else Strings.SAVE,
                         onClick = {
+                            // "Save" lands the resibo text on the clipboard — no storage
+                            // permission needed, and it pastes anywhere.
                             clipboard.setText(AnnotatedString(resiboShareText(breakdown, dateLabel)))
-                            copied = true
+                            saved = true
                         },
                         icon = PamIcons.Download,
                         variant = PamButtonVariant.SECONDARY,

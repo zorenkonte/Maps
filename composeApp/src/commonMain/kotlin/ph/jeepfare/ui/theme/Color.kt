@@ -65,6 +65,14 @@ fun PamPalette.tintOf(tone: PamTone): Color = when (tone) {
     PamTone.NEUTRAL -> bg2
 }
 
+fun PamPalette.baseOf(tone: PamTone): Color = when (tone) {
+    PamTone.RED -> red
+    PamTone.YELLOW -> yellow
+    PamTone.BLUE -> blue
+    PamTone.GREEN -> green
+    PamTone.NEUTRAL -> ink2
+}
+
 fun PamPalette.deepOf(tone: PamTone): Color = when (tone) {
     PamTone.RED -> if (isDark) red else red // red uses base hue for text per design
     PamTone.YELLOW -> yellowDeep

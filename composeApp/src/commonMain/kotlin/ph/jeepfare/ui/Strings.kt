@@ -69,9 +69,10 @@ object Strings {
 
     const val RECEIPT_TITLE = "Resibo"
     const val SHARE = "I-share"
-    const val COPY = "I-kopya"
-    const val COPIED = "Na-kopya!"
+    const val SAVE = "I-save"
+    const val SAVED = "Na-save!"
     const val RECEIPT_HINT = "Ipakita sa konduktor — malinaw ang math, iwas sobrang singil."
+    const val TOO_FAR_NOTE = "Masyadong malayo para sa jeep — hanggang 500 km lang"
 
     fun jeepneyTypeLabel(type: JeepneyType): String = when (type) {
         JeepneyType.TRADITIONAL -> "Traditional"

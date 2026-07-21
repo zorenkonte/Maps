@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
@@ -90,9 +91,11 @@ fun RatesScreen(onBack: () -> Unit) {
                 PamCallout(Strings.RATES_CALLOUT, tone = PamTone.BLUE, icon = PamIcons.Info)
 
                 Text(
-                    buildString {
+                    androidx.compose.ui.text.buildAnnotatedString {
                         append(Strings.RATES_SOURCE_PREFIX)
-                        append(Strings.RATES_SOURCE_FILE)
+                        withStyle(androidx.compose.ui.text.SpanStyle(fontFamily = fonts.mono)) {
+                            append(Strings.RATES_SOURCE_FILE)
+                        }
                         append(Strings.RATES_SOURCE_SUFFIX)
                     },
                     fontFamily = fonts.body, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = pal.ink2,

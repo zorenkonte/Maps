@@ -15,7 +15,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
@@ -47,7 +47,7 @@ fun ResiboDivider(modifier: Modifier = Modifier) {
             start = Offset(0f, size.height / 2),
             end = Offset(size.width, size.height / 2),
             strokeWidth = size.height,
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f)),
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx())),
         )
     }
 }
@@ -73,11 +73,16 @@ fun Resibo(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .graphicsLayer { shadowElevation = if (pop) 24f else 4f; shape = RoundedCornerShape(14.dp); clip = false }
-            .background(pal.surface, RoundedCornerShape(14.dp))
-            .border(PamBorderWidth, pal.line, RoundedCornerShape(14.dp))
-            .drawBehind {
-                // Punched-hole perforation: page-bg dots straddling the top and bottom edges.
+            .graphicsLayer {
+                shadowElevation = (if (pop) 12.dp else 2.dp).toPx()
+                shape = RoundedCornerShape(14.dp)
+                clip = false
+            }
+            // Punched-hole perforation: page-bg dots straddling the top and bottom
+            // edges. Drawn OUTSIDE the border modifier so the holes punch through
+            // the 1.5dp outline instead of the outline painting across them.
+            .drawWithContent {
+                drawContent()
                 val r = 4.5.dp.toPx()
                 val step = 20.dp.toPx()
                 val inset = 10.dp.toPx() + r
@@ -88,6 +93,8 @@ fun Resibo(
                     x += step
                 }
             }
+            .background(pal.surface, RoundedCornerShape(14.dp))
+            .border(PamBorderWidth, pal.line, RoundedCornerShape(14.dp))
             .padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 16.dp),
     ) {
         if (header != null) {

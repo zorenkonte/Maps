@@ -41,6 +41,7 @@ import ph.jeepfare.ui.theme.LocalPamFonts
 import ph.jeepfare.ui.theme.LocalPamPalette
 import ph.jeepfare.ui.theme.PamBorderWidth
 import ph.jeepfare.ui.theme.PamTone
+import ph.jeepfare.ui.theme.baseOf
 import ph.jeepfare.ui.theme.deepOf
 import ph.jeepfare.ui.theme.overline
 import ph.jeepfare.ui.theme.tintOf
@@ -172,7 +173,8 @@ fun PamCard(
     modifier: Modifier = Modifier,
     overline: String? = null,
     stripe: Boolean = false,
-    contentPadding: Dp = 16.dp,
+    contentPadding: androidx.compose.foundation.layout.PaddingValues =
+        androidx.compose.foundation.layout.PaddingValues(16.dp),
     content: @Composable () -> Unit,
 ) {
     val pal = LocalPamPalette.current
@@ -233,7 +235,7 @@ fun PamCallout(
             .padding(horizontal = 13.dp, vertical = 11.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = pal.deepOf(tone), modifier = Modifier.size(19.dp).padding(top = 1.dp))
+        Icon(icon, contentDescription = null, tint = pal.deepOf(tone), modifier = Modifier.padding(top = 1.dp).size(19.dp))
         Text(text, fontFamily = fonts.body, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, lineHeight = 18.9.sp, color = pal.ink)
     }
 }
@@ -327,35 +329,37 @@ fun <T> PamSegmented(
     ) {
         items.forEach { item ->
             val sel = item.value == selected
-            Surface(
-                modifier = Modifier.weight(1f).height(if (item.sub != null) 52.dp else 44.dp),
-                color = if (sel) pal.surface else Color.Transparent,
-                shape = CircleShape,
-                border = if (sel) androidx.compose.foundation.BorderStroke(PamBorderWidth, pal.line) else null,
-                shadowElevation = if (sel) 1.dp else 0.dp,
-                onClick = { onSelect(item.value) },
+            val interaction = remember { MutableInteractionSource() }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(if (item.sub != null) 52.dp else 44.dp)
+                    .graphicsLayer {
+                        if (sel) { shadowElevation = 1.dp.toPx(); shape = CircleShape; clip = false }
+                    }
+                    .background(if (sel) pal.surface else Color.Transparent, CircleShape)
+                    .then(if (sel) Modifier.border(PamBorderWidth, pal.line, CircleShape) else Modifier)
+                    // No ripple: the design system's press feedback is fill/scale only.
+                    .clickable(interactionSource = interaction, indication = null) { onSelect(item.value) },
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Column(
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        if (item.icon != null) {
-                            Icon(
-                                item.icon, contentDescription = null,
-                                tint = if (sel) pal.deepOf(item.iconTone) else pal.ink3,
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
-                        Text(
-                            item.label,
-                            fontFamily = fonts.display, fontWeight = FontWeight.Bold, fontSize = 15.sp,
-                            color = if (sel) pal.ink else pal.ink2, maxLines = 1,
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (item.icon != null) {
+                        Icon(
+                            item.icon, contentDescription = null,
+                            tint = if (sel) pal.baseOf(item.iconTone) else pal.ink3,
+                            modifier = Modifier.size(18.dp),
                         )
                     }
-                    if (item.sub != null) {
-                        Text(item.sub, fontFamily = fonts.mono, fontSize = 11.sp, color = pal.ink3, maxLines = 1)
-                    }
+                    Text(
+                        item.label,
+                        fontFamily = fonts.display, fontWeight = FontWeight.Bold, fontSize = 15.sp,
+                        color = if (sel) pal.ink else pal.ink2, maxLines = 1,
+                    )
+                }
+                if (item.sub != null) {
+                    Text(item.sub, fontFamily = fonts.mono, fontSize = 11.sp, color = pal.ink3, maxLines = 1)
                 }
             }
         }

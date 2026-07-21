@@ -30,6 +30,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -172,6 +173,7 @@ fun MapPickerScreen(
                     modifier = Modifier
                         .weight(1f)
                         .height(44.dp)
+                        .shadow(2.dp, CircleShape)
                         .background(pal.surface, CircleShape)
                         .border(PamBorderWidth, pal.line, CircleShape)
                         .padding(horizontal = 16.dp),
@@ -210,6 +212,7 @@ fun MapPickerScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .shadow(8.dp, RoundedCornerShape(20.dp))
                         .background(pal.surface, RoundedCornerShape(20.dp))
                         .border(PamBorderWidth, pal.line, RoundedCornerShape(20.dp))
                         .padding(14.dp),
@@ -219,6 +222,9 @@ fun MapPickerScreen(
                     ResiboDivider(Modifier.padding(top = 8.dp, bottom = 10.dp))
 
                     val ready = routeState as? RouteState.Ready
+                    // Guard the calculator's cap here too, so "Gamitin" can never hand
+                    // back a distance the calculator will silently reject.
+                    val tooFar = ready != null && ready.distance.distanceKm > MAX_DISTANCE_KM
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         when (routeState) {
                             is RouteState.Loading -> {
@@ -244,10 +250,16 @@ fun MapPickerScreen(
                         PamButton(
                             if (ready != null) Strings.USE_DISTANCE else Strings.PICK_FIRST,
                             onClick = { ready?.let { onUseDistance(it.distance) } },
-                            enabled = ready != null,
+                            enabled = ready != null && !tooFar,
                         )
                     }
-                    if (ready?.usedFallback == true) {
+                    if (tooFar) {
+                        Text(
+                            Strings.TOO_FAR_NOTE,
+                            fontFamily = fonts.body, fontWeight = FontWeight.SemiBold, fontSize = 12.sp,
+                            color = pal.red, modifier = Modifier.padding(top = 6.dp),
+                        )
+                    } else if (ready?.usedFallback == true) {
                         Text(
                             Strings.MAP_ROUTE_FAILED,
                             fontFamily = fonts.body, fontWeight = FontWeight.SemiBold, fontSize = 12.sp,
