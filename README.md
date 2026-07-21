@@ -39,6 +39,13 @@ exactly what you should be paying.
 All fare logic lives in `commonMain` (`ph.jeepfare.domain`) as pure functions
 with unit tests in `commonTest` — shared unchanged between Android and iOS.
 
+## Download
+
+Every push to `main` triggers the [Release APK workflow](.github/workflows/release.yml),
+which runs the unit tests, builds the signed APKs, and publishes them on the
+[Releases page](https://github.com/zorenkonte/Maps/releases) — grab the
+**arm64-v8a** APK for a modern phone.
+
 ## Building
 
 ### Android
