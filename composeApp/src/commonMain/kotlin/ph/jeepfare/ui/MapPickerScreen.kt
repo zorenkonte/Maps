@@ -1,5 +1,8 @@
 package ph.jeepfare.ui
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -10,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -31,28 +35,35 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.launch
 import org.maplibre.compose.camera.CameraPosition
 import org.maplibre.compose.camera.rememberCameraState
 import org.maplibre.compose.expressions.dsl.const
+import org.maplibre.compose.expressions.value.LineCap
+import org.maplibre.compose.expressions.value.LineJoin
 import org.maplibre.compose.layers.CircleLayer
 import org.maplibre.compose.layers.LineLayer
 import org.maplibre.compose.map.MaplibreMap
 import org.maplibre.compose.sources.GeoJsonData
+import org.maplibre.compose.sources.GeoJsonOptions
 import org.maplibre.compose.sources.rememberGeoJsonSource
 import org.maplibre.compose.style.BaseStyle
 import org.maplibre.compose.util.ClickResult
+import org.maplibre.spatialk.geojson.BoundingBox
 import org.maplibre.spatialk.geojson.LineString
 import org.maplibre.spatialk.geojson.Point
 import org.maplibre.spatialk.geojson.Position
 import ph.jeepfare.data.OsrmClient
 import ph.jeepfare.domain.LatLng
 import ph.jeepfare.domain.estimatedRoadKm
+import ph.jeepfare.domain.partialPolyline
 import ph.jeepfare.ui.components.PamButton
 import ph.jeepfare.ui.components.PamChip
 import ph.jeepfare.ui.components.PamIconButton
@@ -69,10 +80,16 @@ private const val STYLE_URL = "https://tiles.openfreemap.org/styles/liberty"
 // Manila City Hall, a central default view for Metro Manila.
 private val DEFAULT_CENTER = Position(longitude = 120.9842, latitude = 14.5995)
 
+private const val ROUTE_DRAW_MS = 1100
+
 private sealed interface RouteState {
     data object Idle : RouteState
     data object Loading : RouteState
-    data class Ready(val distance: MapDistance, val usedFallback: Boolean) : RouteState
+    data class Ready(
+        val distance: MapDistance,
+        val usedFallback: Boolean,
+        val geometry: List<LatLng>,
+    ) : RouteState
 }
 
 @Composable
@@ -88,34 +105,62 @@ fun MapPickerScreen(
     var origin by remember { mutableStateOf<LatLng?>(null) }
     var destination by remember { mutableStateOf<LatLng?>(null) }
     var routeState by remember { mutableStateOf<RouteState>(RouteState.Idle) }
+    // The leading slice of the route currently drawn — grows during the animation.
+    var drawnRoute by remember { mutableStateOf<List<LatLng>>(emptyList()) }
 
     val currentOrigin = origin
     val currentDestination = destination
 
-    LaunchedEffect(currentOrigin, currentDestination) {
-        routeState = if (currentOrigin != null && currentDestination != null) {
-            RouteState.Loading
-        } else {
-            RouteState.Idle
-        }
-        if (currentOrigin != null && currentDestination != null) {
-            // Store the distance rounded to 0.1 km — the same precision it is
-            // displayed with — so the shown km and the charged km never disagree.
-            routeState = osrmClient.routeDistanceKm(currentOrigin, currentDestination).fold(
-                onSuccess = { km ->
-                    RouteState.Ready(MapDistance(roundToTenth(km), isEstimate = false), usedFallback = false)
-                },
-                onFailure = {
-                    val km = estimatedRoadKm(currentOrigin, currentDestination)
-                    RouteState.Ready(MapDistance(roundToTenth(km), isEstimate = true), usedFallback = true)
-                },
-            )
-        }
-    }
-
     val camera = rememberCameraState(
         firstPosition = CameraPosition(target = DEFAULT_CENTER, zoom = 12.0),
     )
+
+    LaunchedEffect(currentOrigin, currentDestination) {
+        drawnRoute = emptyList()
+        if (currentOrigin == null || currentDestination == null) {
+            routeState = RouteState.Idle
+            return@LaunchedEffect
+        }
+        routeState = RouteState.Loading
+        // Store the distance rounded to 0.1 km — the same precision it is
+        // displayed with — so the shown km and the charged km never disagree.
+        routeState = osrmClient.route(currentOrigin, currentDestination).fold(
+            onSuccess = { result ->
+                val geometry = result.geometry.ifEmpty { listOf(currentOrigin, currentDestination) }
+                RouteState.Ready(MapDistance(roundToTenth(result.distanceKm), isEstimate = false), false, geometry)
+            },
+            onFailure = {
+                val km = estimatedRoadKm(currentOrigin, currentDestination)
+                // No road geometry offline — animate the straight estimate instead.
+                RouteState.Ready(MapDistance(roundToTenth(km), isEstimate = true), true, listOf(currentOrigin, currentDestination))
+            },
+        )
+    }
+
+    // Draw the route on like a navigation app: ease the camera to fit the path,
+    // then progressively reveal the polyline from origin to destination.
+    LaunchedEffect(routeState) {
+        val ready = routeState as? RouteState.Ready ?: return@LaunchedEffect
+        val geometry = ready.geometry
+        if (geometry.size < 2) {
+            drawnRoute = geometry
+            return@LaunchedEffect
+        }
+        boundingBoxOf(geometry)?.let { box ->
+            launch {
+                camera.animateTo(
+                    boundingBox = box,
+                    padding = PaddingValues(start = 48.dp, top = 96.dp, end = 48.dp, bottom = 220.dp),
+                    duration = 700.milliseconds,
+                )
+            }
+        }
+        val progress = Animatable(0f)
+        progress.animateTo(1f, animationSpec = tween(durationMillis = ROUTE_DRAW_MS, easing = FastOutSlowInEasing)) {
+            drawnRoute = partialPolyline(geometry, value)
+        }
+        drawnRoute = geometry
+    }
 
     Scaffold(containerColor = pal.bg) { _ ->
         Box(modifier = Modifier.fillMaxSize()) {
@@ -138,17 +183,34 @@ fun MapPickerScreen(
             ) {
                 val o = origin
                 val d = destination
+                val ready = routeState as? RouteState.Ready
 
-                if (o != null && d != null) {
-                    val lineSource = rememberGeoJsonSource(
-                        GeoJsonData.Features(LineString(o.toPosition(), d.toPosition()))
+                if (drawnRoute.size >= 2) {
+                    // Synchronous, un-simplified updates so the per-frame growth is smooth.
+                    val routeSource = rememberGeoJsonSource(
+                        data = GeoJsonData.Features(
+                            LineString(*drawnRoute.map { it.toPosition() }.toTypedArray())
+                        ),
+                        options = GeoJsonOptions(synchronousUpdate = true, tolerance = 0f),
+                    )
+                    // White casing beneath the colored line for a crisp, navigation-app look.
+                    LineLayer(
+                        id = "route-casing",
+                        source = routeSource,
+                        color = const(Color.White),
+                        width = const(9.dp),
+                        cap = const(LineCap.Round),
+                        join = const(LineJoin.Round),
+                        opacity = const(0.9f),
                     )
                     LineLayer(
                         id = "route-line",
-                        source = lineSource,
-                        color = const(pal.blue),
+                        source = routeSource,
+                        // Yellow signals a straight-line estimate; blue is a real OSRM route.
+                        color = const(if (ready?.distance?.isEstimate == true) pal.yellow else pal.blue),
                         width = const(5.dp),
-                        opacity = const(0.9f),
+                        cap = const(LineCap.Round),
+                        join = const(LineJoin.Round),
                     )
                 }
                 if (o != null) {
@@ -314,6 +376,23 @@ private fun MarkerLayer(id: String, latLng: LatLng, color: androidx.compose.ui.g
 }
 
 private fun LatLng.toPosition(): Position = Position(longitude = longitude, latitude = latitude)
+
+/** Bounding box enclosing [points], padded slightly so a near-degenerate route still frames. */
+private fun boundingBoxOf(points: List<LatLng>): BoundingBox? {
+    if (points.isEmpty()) return null
+    var west = points.first().longitude
+    var east = west
+    var south = points.first().latitude
+    var north = south
+    for (p in points) {
+        west = minOf(west, p.longitude)
+        east = maxOf(east, p.longitude)
+        south = minOf(south, p.latitude)
+        north = maxOf(north, p.latitude)
+    }
+    val pad = 0.002
+    return BoundingBox(west = west - pad, south = south - pad, east = east + pad, north = north + pad)
+}
 
 private fun roundToTenth(km: Double): Double = kotlin.math.round(km * 10) / 10.0
 

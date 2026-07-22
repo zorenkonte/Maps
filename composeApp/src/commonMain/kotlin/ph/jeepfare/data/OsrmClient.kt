@@ -33,16 +33,24 @@ class OsrmClient(
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    /** Driving distance in kilometers between [from] and [to]. */
-    suspend fun routeDistanceKm(from: LatLng, to: LatLng): Result<Double> = try {
-        // OSRM expects lon,lat ordering.
+    /**
+     * Driving route between [from] and [to] — distance plus the road-following
+     * polyline used to animate the path on the map. Callers should fall back to a
+     * straight-line estimate on failure.
+     */
+    suspend fun route(from: LatLng, to: LatLng): Result<RouteResult> = try {
+        // OSRM expects lon,lat ordering; full geometry as GeoJSON for the polyline.
         val coords = "${from.longitude},${from.latitude};${to.longitude},${to.latitude}"
-        val response = httpClient.get("$baseUrl/route/v1/driving/$coords?overview=false")
+        val response = httpClient.get("$baseUrl/route/v1/driving/$coords?overview=full&geometries=geojson")
         check(response.status.isSuccess()) { "OSRM returned ${response.status}" }
         val body = json.decodeFromString<OsrmRouteResponse>(response.bodyAsText())
         check(body.code == "Ok") { "OSRM error: ${body.code}" }
         val route = body.routes.firstOrNull() ?: error("OSRM returned no routes")
-        Result.success(route.distance / 1000.0)
+        // GeoJSON coordinates are [longitude, latitude].
+        val geometry = route.geometry?.coordinates.orEmpty().mapNotNull { c ->
+            if (c.size >= 2) LatLng(latitude = c[1], longitude = c[0]) else null
+        }
+        Result.success(RouteResult(distanceKm = route.distance / 1000.0, geometry = geometry))
     } catch (e: CancellationException) {
         // Never swallow coroutine cancellation, or a cancelled request would
         // publish a stale result through the failure branch.
@@ -51,6 +59,12 @@ class OsrmClient(
         Result.failure(e)
     }
 }
+
+/** A driving route: total distance and the road-following polyline (may be empty). */
+data class RouteResult(
+    val distanceKm: Double,
+    val geometry: List<LatLng>,
+)
 
 @Serializable
 internal data class OsrmRouteResponse(
@@ -62,4 +76,11 @@ internal data class OsrmRouteResponse(
 internal data class OsrmRoute(
     /** Route distance in meters. */
     val distance: Double,
+    val geometry: OsrmGeometry? = null,
+)
+
+@Serializable
+internal data class OsrmGeometry(
+    /** GeoJSON LineString coordinates, each [longitude, latitude]. */
+    val coordinates: List<List<Double>> = emptyList(),
 )
