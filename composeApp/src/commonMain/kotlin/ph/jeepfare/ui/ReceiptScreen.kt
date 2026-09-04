@@ -6,13 +6,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,10 +35,12 @@ import ph.jeepfare.domain.FareBreakdown
 import ph.jeepfare.domain.TripParty
 import ph.jeepfare.rememberSaveImage
 import ph.jeepfare.rememberShareImage
+import ph.jeepfare.ui.components.PamBarBack
+import ph.jeepfare.ui.components.PamBarTitle
 import ph.jeepfare.ui.components.PamButton
 import ph.jeepfare.ui.components.PamButtonVariant
+import ph.jeepfare.ui.components.PamPinnedHeader
 import ph.jeepfare.ui.components.PamStripe
-import ph.jeepfare.ui.components.PamTopBar
 import ph.jeepfare.ui.components.Resibo
 import ph.jeepfare.ui.components.ResiboRow
 import ph.jeepfare.ui.theme.LocalPamFonts
@@ -82,13 +81,13 @@ fun ReceiptScreen(breakdown: FareBreakdown, party: TripParty, onBack: () -> Unit
     val shiftedDivider = dividerAt?.plus(1)
 
     Scaffold(containerColor = pal.bg) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState()),
+        PamPinnedHeader(
+            modifier = Modifier.padding(padding),
+            bar = {
+                PamBarBack(onBack)
+                PamBarTitle(Strings.RECEIPT_TITLE, Modifier.pamEnter(index = 0))
+            },
         ) {
-            PamTopBar(Strings.RECEIPT_TITLE, onBack = onBack, modifier = Modifier.pamEnter(index = 0))
             Column(
                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
