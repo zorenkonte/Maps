@@ -21,6 +21,10 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -31,11 +35,14 @@ import ph.jeepfare.domain.FareBreakdown
 import ph.jeepfare.domain.FareCalculator
 import ph.jeepfare.domain.JeepneyType
 import ph.jeepfare.domain.PassengerType
+import ph.jeepfare.domain.TripParty
 import ph.jeepfare.ui.components.PamButton
 import ph.jeepfare.ui.components.PamButtonSize
 import ph.jeepfare.ui.components.PamButtonVariant
 import ph.jeepfare.ui.components.PamCard
 import ph.jeepfare.ui.components.PamChip
+import ph.jeepfare.ui.components.PamChoiceGrid
+import ph.jeepfare.ui.components.PamChoiceItem
 import ph.jeepfare.ui.components.PamHeroTopBar
 import ph.jeepfare.ui.components.PamIconButton
 import ph.jeepfare.ui.components.PamOverline
@@ -53,7 +60,8 @@ enum class DistanceInputMode { MAP, MANUAL }
 /** Distance picked from the map, flagged when it is only a straight-line estimate. */
 data class MapDistance(val distanceKm: Double, val isEstimate: Boolean)
 
-const val MAX_PASSENGERS_PER_TYPE = 30
+/** Companions a commuter can pay for per fare type — a family, not a jeep-load. */
+const val MAX_COMPANIONS_PER_TYPE = 8
 
 /** Longest accepted trip; well beyond any jeepney route. */
 const val MAX_DISTANCE_KM = 500.0
@@ -86,8 +94,9 @@ fun CalculatorScreen(
     onManualKmTextChange: (String) -> Unit,
     mapDistance: MapDistance?,
     onPickOnMap: () -> Unit,
-    passengerCounts: Map<PassengerType, Int>,
-    onPassengerCountChange: (PassengerType, Int) -> Unit,
+    party: TripParty,
+    onFareTypeChange: (PassengerType) -> Unit,
+    onCompanionCountChange: (PassengerType, Int) -> Unit,
     isDark: Boolean,
     onToggleDark: () -> Unit,
     onOpenRates: () -> Unit,
@@ -101,10 +110,14 @@ fun CalculatorScreen(
         DistanceInputMode.MAP -> validDistanceOrNull(mapDistance?.distanceKm)
         DistanceInputMode.MANUAL -> validDistanceOrNull(manualKm)
     }
-    val totalPassengers = passengerCounts.values.sum()
-    val breakdown = distanceKm?.takeIf { totalPassengers > 0 }?.let {
-        FareCalculator.calculate(it, jeepneyType, passengerCounts)
-    }
+    // The commuter is always one rider, so a distance is the only thing a fare waits on.
+    val breakdown = distanceKm?.let { FareCalculator.calculate(it, jeepneyType, party.counts()) }
+
+    // Companion steppers stay collapsed until asked for — riding alone is the
+    // common case, and an always-visible tally is what makes an app feel like
+    // it belongs to the driver.
+    var companionsExpanded by rememberSaveable { mutableStateOf(false) }
+    val showCompanions = companionsExpanded || party.companionCount > 0
 
     Scaffold(containerColor = pal.bg) { padding ->
         Column(
@@ -162,36 +175,54 @@ fun CalculatorScreen(
                     }
                 }
 
-                PamCard(
-                    overline = Strings.OVERLINE_PASSENGERS,
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                ) {
-                    Column {
-                        PassengerType.entries.forEachIndexed { index, type ->
-                            if (index > 0) HorizontalDivider(thickness = 1.5.dp, color = pal.line)
-                            PamStepper(
-                                icon = passengerIconFor(type),
-                                tone = passengerToneFor(type),
-                                label = Strings.passengerTypeLabel(type),
-                                chip = if (type.discounted) Strings.DISCOUNT_CHIP else null,
-                                value = passengerCounts[type] ?: 0,
-                                onValueChange = { onPassengerCountChange(type, it) },
-                                max = MAX_PASSENGERS_PER_TYPE,
-                            )
-                        }
+                PamCard(overline = Strings.OVERLINE_FARE_TYPE) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        PamChoiceGrid(
+                            items = PassengerType.entries.map { type ->
+                                PamChoiceItem(
+                                    value = type,
+                                    label = Strings.passengerTypeLabel(type),
+                                    icon = passengerIconFor(type),
+                                    tone = passengerToneFor(type),
+                                    note = if (type.discounted) Strings.DISCOUNT_CHIP else null,
+                                )
+                            },
+                            selected = party.myFareType,
+                            onSelect = onFareTypeChange,
+                        )
+                        Text(
+                            Strings.FARE_TYPE_HINT,
+                            fontFamily = fonts.body, fontWeight = FontWeight.SemiBold, fontSize = 12.sp,
+                            color = pal.ink2,
+                        )
                     }
                 }
+
+                CompanionsCard(
+                    party = party,
+                    expanded = showCompanions,
+                    onToggle = {
+                        if (showCompanions) {
+                            // "Just me" is a real answer, not just a fold — drop the companions too.
+                            PassengerType.entries.forEach { onCompanionCountChange(it, 0) }
+                            companionsExpanded = false
+                        } else {
+                            companionsExpanded = true
+                        }
+                    },
+                    onCompanionCountChange = onCompanionCountChange,
+                )
 
                 PamOverline(Strings.OVERLINE_BREAKDOWN)
 
                 if (breakdown != null) {
-                    val (rows, dividerAt) = resiboRows(breakdown)
+                    val (rows, dividerAt) = resiboRows(breakdown, party)
                     Resibo(
                         header = Strings.RESIBO_HEADER,
                         sub = "${Strings.jeepneyTypeLong(jeepneyType)} · ${formatKm(breakdown.distanceKm)} km",
                         rows = rows,
                         dividerBeforeIndex = dividerAt,
-                        totalLabel = Strings.RESIBO_TOTAL,
+                        totalLabel = totalLabelFor(party),
                         totalValue = breakdown.total.peso(),
                         footer = Strings.RESIBO_FOOTER,
                     )
@@ -204,7 +235,7 @@ fun CalculatorScreen(
                     )
                 } else {
                     Text(
-                        if (totalPassengers == 0) Strings.NO_PASSENGERS_PROMPT else Strings.ENTER_DISTANCE_PROMPT,
+                        Strings.ENTER_DISTANCE_PROMPT,
                         fontFamily = fonts.body, fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
                         color = pal.ink2,
                     )
@@ -219,6 +250,59 @@ fun CalculatorScreen(
                         .padding(4.dp),
                 )
                 Spacer(Modifier.height(12.dp))
+            }
+        }
+    }
+}
+
+/**
+ * Optional companion counts. A commuter mostly rides alone, so this stays a
+ * one-line "Just me" until they say otherwise — and the caps are family-sized.
+ */
+@Composable
+private fun CompanionsCard(
+    party: TripParty,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onCompanionCountChange: (PassengerType, Int) -> Unit,
+) {
+    val pal = LocalPamPalette.current
+    val fonts = LocalPamFonts.current
+    PamCard(overline = Strings.OVERLINE_COMPANIONS) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (party.companionCount > 0) {
+                        Strings.COMPANIONS_CHIP.replace("%d", party.companionCount.toString())
+                    } else {
+                        Strings.COMPANIONS_HINT
+                    },
+                    fontFamily = fonts.body, fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+                    color = pal.ink2, modifier = Modifier.weight(1f),
+                )
+                PamButton(
+                    if (expanded) Strings.HIDE_COMPANIONS else Strings.ADD_COMPANIONS,
+                    onClick = onToggle,
+                    icon = if (expanded) PamIcons.Remove else PamIcons.Add,
+                    variant = PamButtonVariant.SECONDARY,
+                    size = PamButtonSize.SM,
+                )
+            }
+            if (expanded) {
+                Column {
+                    PassengerType.entries.forEachIndexed { index, type ->
+                        if (index > 0) HorizontalDivider(thickness = 1.5.dp, color = pal.line)
+                        PamStepper(
+                            icon = passengerIconFor(type),
+                            tone = passengerToneFor(type),
+                            label = Strings.passengerTypeLabel(type),
+                            chip = if (type.discounted) Strings.DISCOUNT_CHIP else null,
+                            value = party.companionsOf(type),
+                            onValueChange = { onCompanionCountChange(type, it) },
+                            max = MAX_COMPANIONS_PER_TYPE,
+                        )
+                    }
+                }
             }
         }
     }
