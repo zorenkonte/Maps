@@ -23,6 +23,10 @@ val PamBorderWidth = 1.5.dp
 fun PamasaheTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
     val palette = if (darkTheme) PamDarkPalette else PamLightPalette
     val fonts = rememberPamFonts()
+    // The status and navigation bars belong to the page too: their icons follow
+    // the app's theme, not the system's, or a light app under a dark system
+    // ends up with white-on-cream status icons.
+    PamSystemBars(darkTheme)
     CompositionLocalProvider(
         LocalPamPalette provides palette,
         LocalPamFonts provides fonts,

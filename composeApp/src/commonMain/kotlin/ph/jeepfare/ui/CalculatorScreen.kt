@@ -9,15 +9,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -40,6 +37,7 @@ import ph.jeepfare.domain.FareCalculator
 import ph.jeepfare.domain.JeepneyType
 import ph.jeepfare.domain.PassengerType
 import ph.jeepfare.domain.TripParty
+import ph.jeepfare.ui.components.PamBarTitle
 import ph.jeepfare.ui.components.PamButton
 import ph.jeepfare.ui.components.PamButtonSize
 import ph.jeepfare.ui.components.PamButtonVariant
@@ -50,6 +48,7 @@ import ph.jeepfare.ui.components.PamChoiceItem
 import ph.jeepfare.ui.components.PamHeroTopBar
 import ph.jeepfare.ui.components.PamIconButton
 import ph.jeepfare.ui.components.PamOverline
+import ph.jeepfare.ui.components.PamPinnedHeader
 import ph.jeepfare.ui.components.PamSegmentItem
 import ph.jeepfare.ui.components.PamSegmented
 import ph.jeepfare.ui.components.PamStepper
@@ -130,23 +129,29 @@ fun CalculatorScreen(
     val showCompanions = companionsExpanded || party.companionCount > 0
 
     Scaffold(containerColor = pal.bg) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .imePadding()
-                .verticalScroll(rememberScrollState()),
-        ) {
-            PamHeroTopBar(modifier = Modifier.pamEnter(index = 0)) {
+        PamPinnedHeader(
+            modifier = Modifier.padding(padding).imePadding(),
+            // The wordmark reads as a large title: it sits in the page and
+            // scrolls away, handing its name to the bar that stays behind.
+            largeHeader = { PamHeroTopBar(Modifier.pamEnter(index = 0)) },
+            bar = { collapse ->
+                PamBarTitle(
+                    Strings.APP_TITLE,
+                    // Lines the small mark up with the big one it takes over from.
+                    Modifier.padding(start = 4.dp),
+                    collapse = collapse,
+                    mark = true,
+                )
                 // Spec: a single trailing action (theme toggle). The Rates screen is
                 // reached via the tappable LTFRB note at the bottom of this screen.
                 PamIconButton(
                     if (isDark) PamIcons.LightMode else PamIcons.DarkMode,
                     contentDescription = Strings.THEME,
                     onClick = onToggleDark,
+                    modifier = Modifier.pamEnter(index = 0),
                 )
-            }
-
+            },
+        ) {
             Column(
                 modifier = Modifier.padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
