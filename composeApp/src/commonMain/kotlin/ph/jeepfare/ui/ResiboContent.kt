@@ -60,16 +60,19 @@ fun resiboRows(b: FareBreakdown, party: TripParty): Pair<List<ResiboRow>, Int?> 
     return rows to dividerAt
 }
 
-/** Plain-text version of the resibo for the platform share sheet. */
-fun resiboShareText(b: FareBreakdown, party: TripParty, dateLabel: String): String = buildString {
-    appendLine(Strings.RECEIPT_SHARE_HEADER)
-    appendLine("${Strings.jeepneyTypeLong(b.jeepneyType)} · ${formatKm(b.distanceKm)} km · $dateLabel")
-    appendLine("----------------------------")
-    resiboRows(b, party).first.forEach { row -> appendLine("${row.label}: ${row.value}") }
-    appendLine("----------------------------")
-    appendLine("${totalLabelFor(party)}: ${b.total.peso()}")
-    appendLine(Strings.FARE_MATRIX_NOTE)
-    append(Strings.RESIBO_FOOTER)
+/**
+ * File-safe name for the saved or shared receipt image, e.g.
+ * "pamasahe-Sep-4-2026-9-41-AM" — readable in a gallery, and unique per minute
+ * so a second receipt does not overwrite the first.
+ */
+fun receiptFileName(dateLabel: String): String {
+    val slug = dateLabel
+        .map { if (it.isLetterOrDigit()) it else '-' }
+        .joinToString("")
+        .split('-')
+        .filter { it.isNotEmpty() }
+        .joinToString("-")
+    return if (slug.isEmpty()) "pamasahe-receipt" else "pamasahe-$slug"
 }
 
 fun formatKm(km: Double): String {

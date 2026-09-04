@@ -47,6 +47,8 @@ kotlin {
         }
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
+            // FileProvider, for handing the shared receipt PNG to other apps.
+            implementation(libs.androidx.core)
             implementation(libs.ktor.client.okhttp)
         }
         iosMain.dependencies {

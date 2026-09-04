@@ -74,10 +74,10 @@ object Strings {
     const val RATES_SOURCE_SUFFIX = " — one place only."
 
     const val RECEIPT_TITLE = "Receipt"
-    const val RECEIPT_SHARE_HEADER = "PAMASAHE — fare receipt"
     const val SHARE = "Share"
-    const val SAVE = "Copy"
-    const val SAVED = "Copied!"
+    const val SAVE = "Download"
+    const val SAVED = "Saved!"
+    const val SAVE_FAILED = "Can't save"
     const val RECEIPT_HINT = "Show this to the conductor — the math is in the open, so an overcharge is easy to spot."
     const val TOO_FAR_NOTE = "Too far for a jeepney — 500 km max"
 

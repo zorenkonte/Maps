@@ -1,6 +1,7 @@
 package ph.jeepfare.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,20 +20,24 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import ph.jeepfare.currentDateLabel
 import ph.jeepfare.domain.FareBreakdown
 import ph.jeepfare.domain.TripParty
-import ph.jeepfare.rememberShareText
-import ph.jeepfare.currentDateLabel
+import ph.jeepfare.rememberSaveImage
+import ph.jeepfare.rememberShareImage
 import ph.jeepfare.ui.components.PamButton
 import ph.jeepfare.ui.components.PamButtonVariant
 import ph.jeepfare.ui.components.PamStripe
@@ -45,19 +50,30 @@ import ph.jeepfare.ui.theme.PamIcons
 import ph.jeepfare.ui.theme.pamArriveEnter
 import ph.jeepfare.ui.theme.pamEnter
 
+/** What the download button is currently reporting. */
+private enum class SaveState { IDLE, SAVED, FAILED }
+
 @Composable
 fun ReceiptScreen(breakdown: FareBreakdown, party: TripParty, onBack: () -> Unit) {
     val pal = LocalPamPalette.current
     val fonts = LocalPamFonts.current
-    val shareText = rememberShareText()
-    val clipboard = LocalClipboardManager.current
+    val scope = rememberCoroutineScope()
+    val shareImage = rememberShareImage()
+    val saveImage = rememberSaveImage()
     val dateLabel = remember { currentDateLabel() }
-    var saved by remember { mutableStateOf(false) }
-    // "Copied!" is transient feedback, not a permanent label change.
-    LaunchedEffect(saved) {
-        if (saved) {
-            kotlinx.coroutines.delay(2000)
-            saved = false
+    val fileName = remember(dateLabel) { receiptFileName(dateLabel) }
+
+    // The receipt travels as a picture, so what is shared is literally what is
+    // drawn here: this layer records the framed receipt, and the two buttons
+    // hand the recorded bitmap to the share sheet or to the gallery.
+    val receiptLayer = rememberGraphicsLayer()
+
+    var saveState by remember { mutableStateOf(SaveState.IDLE) }
+    // "Saved!" is transient feedback, not a permanent label change.
+    LaunchedEffect(saveState) {
+        if (saveState != SaveState.IDLE) {
+            delay(2000)
+            saveState = SaveState.IDLE
         }
     }
 
@@ -77,27 +93,40 @@ fun ReceiptScreen(breakdown: FareBreakdown, party: TripParty, onBack: () -> Unit
                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                PamStripe(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(3.dp))
-                        .pamEnter(index = 1),
-                )
                 // The receipt is what this screen is for: it is handed to you,
                 // rising into place a beat after the header settles.
                 var receiptShown by remember { mutableStateOf(false) }
                 LaunchedEffect(Unit) { receiptShown = true }
                 AnimatedVisibility(visible = receiptShown, enter = pamArriveEnter()) {
-                    Resibo(
-                        header = Strings.RESIBO_HEADER,
-                        sub = "${Strings.jeepneyTypeLong(breakdown.jeepneyType)} · ${formatKm(breakdown.distanceKm)} km",
-                        rows = allRows,
-                        dividerBeforeIndex = shiftedDivider,
-                        totalLabel = totalLabelFor(party),
-                        totalValue = breakdown.total.peso(),
-                        footer = Strings.RESIBO_FOOTER,
-                        pop = true,
-                    )
+                    Column(
+                        modifier = Modifier
+                            .drawWithContent {
+                                receiptLayer.record { this@drawWithContent.drawContent() }
+                                drawLayer(receiptLayer)
+                            }
+                            // Opaque page color and a little breathing room, so the
+                            // shared PNG is a framed receipt rather than a cut-out
+                            // with a clipped shadow.
+                            .background(pal.bg)
+                            .padding(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        PamStripe(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(3.dp)),
+                        )
+                        Resibo(
+                            header = Strings.RESIBO_HEADER,
+                            sub = "${Strings.jeepneyTypeLong(breakdown.jeepneyType)} · ${formatKm(breakdown.distanceKm)} km",
+                            rows = allRows,
+                            dividerBeforeIndex = shiftedDivider,
+                            totalLabel = totalLabelFor(party),
+                            totalValue = breakdown.total.peso(),
+                            footer = Strings.RESIBO_FOOTER,
+                            pop = true,
+                        )
+                    }
                 }
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -105,17 +134,25 @@ fun ReceiptScreen(breakdown: FareBreakdown, party: TripParty, onBack: () -> Unit
                 ) {
                     PamButton(
                         Strings.SHARE,
-                        onClick = { shareText(resiboShareText(breakdown, party, dateLabel)) },
+                        onClick = {
+                            scope.launch { shareImage(receiptLayer.toImageBitmap(), fileName) }
+                        },
                         icon = PamIcons.Share,
                         modifier = Modifier.weight(1f),
                     )
                     PamButton(
-                        if (saved) Strings.SAVED else Strings.SAVE,
+                        when (saveState) {
+                            SaveState.SAVED -> Strings.SAVED
+                            SaveState.FAILED -> Strings.SAVE_FAILED
+                            SaveState.IDLE -> Strings.SAVE
+                        },
                         onClick = {
-                            // "Copy" lands the receipt text on the clipboard — no storage
-                            // permission needed, and it pastes anywhere.
-                            clipboard.setText(AnnotatedString(resiboShareText(breakdown, party, dateLabel)))
-                            saved = true
+                            scope.launch {
+                                val image = receiptLayer.toImageBitmap()
+                                saveImage(image, fileName) { ok ->
+                                    saveState = if (ok) SaveState.SAVED else SaveState.FAILED
+                                }
+                            }
                         },
                         icon = PamIcons.Download,
                         variant = PamButtonVariant.SECONDARY,
