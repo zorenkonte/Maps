@@ -1,5 +1,7 @@
 package ph.jeepfare.ui.components
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -28,6 +30,8 @@ import androidx.compose.ui.unit.sp
 import ph.jeepfare.ui.theme.LocalPamFonts
 import ph.jeepfare.ui.theme.LocalPamPalette
 import ph.jeepfare.ui.theme.PamBorderWidth
+import ph.jeepfare.ui.theme.PamMotion
+import ph.jeepfare.ui.theme.pamSwap
 
 /** One line on the receipt. */
 data class ResiboRow(
@@ -73,6 +77,9 @@ fun Resibo(
     Column(
         modifier = modifier
             .fillMaxWidth()
+            // Adding a companion adds a line: the paper grows to fit it instead
+            // of the layout jumping, and the perforated edge rides along.
+            .animateContentSize(animationSpec = PamMotion.spatial())
             .graphicsLayer {
                 shadowElevation = (if (pop) 12.dp else 2.dp).toPx()
                 shape = RoundedCornerShape(14.dp)
@@ -153,11 +160,19 @@ fun Resibo(
                     fontFamily = fonts.mono, fontWeight = FontWeight.Bold, fontSize = 13.sp, letterSpacing = 0.05.em,
                     color = pal.ink, modifier = Modifier.weight(1f),
                 )
-                Text(
-                    totalValue,
-                    fontFamily = fonts.display, fontWeight = FontWeight.ExtraBold, fontSize = 26.sp, lineHeight = 26.sp,
-                    color = pal.ink,
-                )
+                // The total is the number people actually read; it rolls up to a
+                // new amount rather than being swapped out underneath them.
+                AnimatedContent(
+                    targetState = totalValue,
+                    transitionSpec = { pamSwap() },
+                    label = "resiboTotal",
+                ) { amount ->
+                    Text(
+                        amount,
+                        fontFamily = fonts.display, fontWeight = FontWeight.ExtraBold, fontSize = 26.sp, lineHeight = 26.sp,
+                        color = pal.ink,
+                    )
+                }
             }
         }
         if (footer != null) {

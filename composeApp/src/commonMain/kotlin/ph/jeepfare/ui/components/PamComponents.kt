@@ -1,8 +1,10 @@
 package ph.jeepfare.ui.components
 
-import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,10 +12,12 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -28,7 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -40,22 +44,37 @@ import androidx.compose.ui.unit.sp
 import ph.jeepfare.ui.theme.LocalPamFonts
 import ph.jeepfare.ui.theme.LocalPamPalette
 import ph.jeepfare.ui.theme.PamBorderWidth
+import ph.jeepfare.ui.theme.PamMotion
 import ph.jeepfare.ui.theme.PamTone
+import ph.jeepfare.ui.theme.pamCounterSwap
+import ph.jeepfare.ui.theme.pamIconSwap
+import ph.jeepfare.ui.theme.pamSwap
 import ph.jeepfare.ui.theme.baseOf
 import ph.jeepfare.ui.theme.deepOf
 import ph.jeepfare.ui.theme.overline
 import ph.jeepfare.ui.theme.tintOf
 
-/** Motion: quick and physical — 160ms cubic-bezier(.2,.7,.3,1), press scale. */
-val PamEasing = CubicBezierEasing(0.2f, 0.7f, 0.3f, 1f)
-
 @Composable
 private fun pressScale(pressed: Boolean, target: Float): Float {
+    // Press dips on the design system's 160ms ease; release springs back, so a
+    // tap feels like a button letting go rather than a value snapping.
     val scale by animateFloatAsState(
         targetValue = if (pressed) target else 1f,
-        animationSpec = tween(durationMillis = 160, easing = PamEasing),
+        animationSpec = if (pressed) PamMotion.press() else PamMotion.bouncy(),
+        label = "pressScale",
     )
     return scale
+}
+
+/** Enabled/disabled dimming, animated so a control never blinks in or out. */
+@Composable
+private fun enabledAlpha(enabled: Boolean): Float {
+    val alpha by animateFloatAsState(
+        targetValue = if (enabled) 1f else 0.4f,
+        animationSpec = PamMotion.quick(),
+        label = "enabledAlpha",
+    )
+    return alpha
 }
 
 /** Tricolor signage stripe (tokens --stripe): red/yellow/blue repeating band. */
@@ -99,18 +118,23 @@ fun PamButton(
     val hPad = if (size == PamButtonSize.SM) 16.dp else 22.dp
     val iconSize = if (size == PamButtonSize.SM) 18.dp else 20.dp
 
-    val bg: Color; val fg: Color; val borderColor: Color?
+    val bgTarget: Color; val fg: Color; val borderColor: Color?
     when (variant) {
-        PamButtonVariant.PRIMARY -> { bg = if (pressed) pal.actionPress else pal.action; fg = pal.actionInk; borderColor = null }
-        PamButtonVariant.YELLOW -> { bg = if (pressed) pal.yellowDeep else pal.yellow; fg = Color(0xFF271F18); borderColor = null }
-        PamButtonVariant.SECONDARY -> { bg = if (pressed) pal.bg2 else pal.surface; fg = pal.ink; borderColor = pal.line2 }
-        PamButtonVariant.GHOST -> { bg = if (pressed) pal.bg2 else Color.Transparent; fg = pal.blue; borderColor = null }
+        PamButtonVariant.PRIMARY -> { bgTarget = if (pressed) pal.actionPress else pal.action; fg = pal.actionInk; borderColor = null }
+        PamButtonVariant.YELLOW -> { bgTarget = if (pressed) pal.yellowDeep else pal.yellow; fg = Color(0xFF271F18); borderColor = null }
+        PamButtonVariant.SECONDARY -> { bgTarget = if (pressed) pal.bg2 else pal.surface; fg = pal.ink; borderColor = pal.line2 }
+        PamButtonVariant.GHOST -> { bgTarget = if (pressed) pal.bg2 else Color.Transparent; fg = pal.blue; borderColor = null }
     }
+    // The fill blends instead of cutting — a pressed button that snaps color
+    // reads as a redraw, one that blends reads as a surface being pushed.
+    val bg by animateColorAsState(bgTarget, animationSpec = PamMotion.press(), label = "buttonBg")
+    val alpha = enabledAlpha(enabled)
 
     Row(
         modifier = modifier
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .alpha(if (enabled) 1f else 0.4f)
+            .graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha }
+            // Label swaps ("Save" -> "Saved!") resize the pill smoothly.
+            .animateContentSize(animationSpec = PamMotion.spatial())
             .height(height)
             .background(bg, CircleShape)
             .then(if (borderColor != null) Modifier.border(PamBorderWidth, borderColor, CircleShape) else Modifier)
@@ -119,8 +143,28 @@ fun PamButton(
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (icon != null) Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(iconSize))
-        Text(text, fontFamily = fonts.display, fontWeight = FontWeight.Bold, fontSize = fontSize, color = fg, maxLines = 1)
+        if (icon != null) {
+            AnimatedContent(
+                targetState = icon,
+                transitionSpec = { pamSwap() },
+                contentAlignment = Alignment.Center,
+                label = "buttonIcon",
+            ) { current ->
+                Icon(current, contentDescription = null, tint = fg, modifier = Modifier.size(iconSize))
+            }
+        }
+        AnimatedContent(
+            targetState = text,
+            transitionSpec = { pamSwap() },
+            contentAlignment = Alignment.Center,
+            label = "buttonLabel",
+        ) { current ->
+            Text(
+                current,
+                fontFamily = fonts.display, fontWeight = FontWeight.Bold, fontSize = fontSize,
+                color = fg, maxLines = 1,
+            )
+        }
     }
 }
 
@@ -140,22 +184,32 @@ fun PamIconButton(
     val pressed by interaction.collectIsPressedAsState()
     val scale = pressScale(pressed, 0.94f)
 
-    val bg: Color; val fg: Color; val borderColor: Color?
+    val bgTarget: Color; val fg: Color; val borderColor: Color?
     when (variant) {
-        PamIconButtonVariant.PLAIN -> { bg = if (pressed) pal.bg2 else pal.surface; fg = pal.ink2; borderColor = pal.line }
-        PamIconButtonVariant.TONAL -> { bg = pal.bg2; fg = pal.ink; borderColor = null }
-        PamIconButtonVariant.FILLED -> { bg = if (pressed) pal.actionPress else pal.action; fg = Color.White; borderColor = null }
+        PamIconButtonVariant.PLAIN -> { bgTarget = if (pressed) pal.bg2 else pal.surface; fg = pal.ink2; borderColor = pal.line }
+        PamIconButtonVariant.TONAL -> { bgTarget = pal.bg2; fg = pal.ink; borderColor = null }
+        PamIconButtonVariant.FILLED -> { bgTarget = if (pressed) pal.actionPress else pal.action; fg = Color.White; borderColor = null }
     }
+    val bg by animateColorAsState(bgTarget, animationSpec = PamMotion.press(), label = "iconButtonBg")
     Box(
         modifier = modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .size(size)
             .background(bg, CircleShape)
             .then(if (borderColor != null) Modifier.border(PamBorderWidth, borderColor, CircleShape) else Modifier)
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .clipToBounds(),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = contentDescription, tint = fg, modifier = Modifier.size(size * 0.46f))
+        // Swapping the glyph (sun <-> moon) turns and fades rather than cutting.
+        AnimatedContent(
+            targetState = icon,
+            transitionSpec = { pamIconSwap() },
+            contentAlignment = Alignment.Center,
+            label = "iconButtonIcon",
+        ) { current ->
+            Icon(current, contentDescription = contentDescription, tint = fg, modifier = Modifier.size(size * 0.46f))
+        }
     }
 }
 
@@ -276,11 +330,21 @@ fun PamStepper(
             ph.jeepfare.ui.Strings.STEPPER_DECREASE.replace("%s", label),
             enabled = value > min,
         ) { onValueChange(value - 1) }
-        Text(
-            "$value",
-            fontFamily = fonts.mono, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = pal.ink,
-            textAlign = TextAlign.Center, modifier = Modifier.width(34.dp),
-        )
+        // The count rolls in the direction it was changed, so a tap on + reads
+        // as the number being pushed up rather than replaced.
+        AnimatedContent(
+            targetState = value,
+            transitionSpec = { pamCounterSwap(increasing = targetState > initialState) },
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.width(34.dp).clipToBounds(),
+            label = "stepperCount",
+        ) { count ->
+            Text(
+                "$count",
+                fontFamily = fonts.mono, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = pal.ink,
+                textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+            )
+        }
         StepperButton(
             ph.jeepfare.ui.theme.PamIcons.Add,
             ph.jeepfare.ui.Strings.STEPPER_INCREASE.replace("%s", label),
@@ -295,17 +359,27 @@ private fun StepperButton(icon: ImageVector, contentDescription: String, enabled
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale = pressScale(pressed && enabled, 0.94f)
+    val alpha = enabledAlpha(enabled)
+    val bg by animateColorAsState(
+        if (pressed && enabled) pal.bg2 else pal.surface,
+        animationSpec = PamMotion.press(),
+        label = "stepperButtonBg",
+    )
+    val tint by animateColorAsState(
+        if (enabled) pal.ink else pal.ink3,
+        animationSpec = PamMotion.quick(),
+        label = "stepperButtonTint",
+    )
     Box(
         modifier = Modifier
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .alpha(if (enabled) 1f else 0.4f)
+            .graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha }
             .size(44.dp)
-            .background(if (pressed && enabled) pal.bg2 else pal.surface, CircleShape)
+            .background(bg, CircleShape)
             .border(PamBorderWidth, pal.line2, CircleShape)
             .clickable(interactionSource = interaction, indication = null, enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = contentDescription, tint = if (enabled) pal.ink else pal.ink3, modifier = Modifier.size(20.dp))
+        Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(20.dp))
     }
 }
 
@@ -359,15 +433,45 @@ private fun <T> PamChoiceTile(
     val fonts = LocalPamFonts.current
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val scale = pressScale(pressed, 0.97f)
+    val pressScale = pressScale(pressed, 0.97f)
     val shape = RoundedCornerShape(16.dp)
+
+    // Selection fills and outlines blend rather than flip, and the chosen tile
+    // settles a hair larger — the "this one is mine" cue reads without a bounce.
+    val fill by animateColorAsState(
+        if (selected) pal.tintOf(item.tone) else pal.bg2,
+        animationSpec = PamMotion.standard(), label = "tileFill",
+    )
+    val outline by animateColorAsState(
+        if (selected) pal.deepOf(item.tone) else pal.line,
+        animationSpec = PamMotion.standard(), label = "tileOutline",
+    )
+    val accent by animateColorAsState(
+        if (selected) pal.deepOf(item.tone) else pal.ink3,
+        animationSpec = PamMotion.standard(), label = "tileAccent",
+    )
+    val labelColor by animateColorAsState(
+        if (selected) pal.ink else pal.ink2,
+        animationSpec = PamMotion.standard(), label = "tileLabel",
+    )
+    val selectScale by animateFloatAsState(
+        if (selected) 1f else 0.985f,
+        animationSpec = PamMotion.bouncy(), label = "tileSelectScale",
+    )
+    val iconScale by animateFloatAsState(
+        if (selected) 1.08f else 1f,
+        animationSpec = PamMotion.bouncy(), label = "tileIconScale",
+    )
 
     Row(
         modifier = modifier
-            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .graphicsLayer {
+                scaleX = pressScale * selectScale
+                scaleY = pressScale * selectScale
+            }
             .height(60.dp)
-            .background(if (selected) pal.tintOf(item.tone) else pal.bg2, shape)
-            .border(PamBorderWidth, if (selected) pal.deepOf(item.tone) else pal.line, shape)
+            .background(fill, shape)
+            .border(PamBorderWidth, outline, shape)
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
             .padding(horizontal = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -376,20 +480,22 @@ private fun <T> PamChoiceTile(
         Icon(
             item.icon,
             contentDescription = null,
-            tint = if (selected) pal.deepOf(item.tone) else pal.ink3,
-            modifier = Modifier.size(22.dp),
+            tint = accent,
+            modifier = Modifier
+                .graphicsLayer { scaleX = iconScale; scaleY = iconScale }
+                .size(22.dp),
         )
         Column(Modifier.weight(1f)) {
             Text(
                 item.label,
                 fontFamily = fonts.display, fontWeight = FontWeight.Bold, fontSize = 15.sp, lineHeight = 18.sp,
-                color = if (selected) pal.ink else pal.ink2, maxLines = 1,
+                color = labelColor, maxLines = 1,
             )
             if (item.note != null) {
                 Text(
                     item.note,
                     fontFamily = fonts.body, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp,
-                    color = if (selected) pal.deepOf(item.tone) else pal.ink3, maxLines = 1,
+                    color = accent, maxLines = 1,
                 )
             }
         }
@@ -404,7 +510,13 @@ data class PamSegmentItem<T>(
     val sub: String? = null,
 )
 
-/** Cream track with a white selected pill. */
+/**
+ * Cream track with a white selected pill.
+ *
+ * The pill is a single element that *slides* between segments instead of one
+ * background switching off while another switches on — the difference between
+ * a control that moves and a control that redraws.
+ */
 @Composable
 fun <T> PamSegmented(
     items: List<PamSegmentItem<T>>,
@@ -414,47 +526,79 @@ fun <T> PamSegmented(
 ) {
     val pal = LocalPamPalette.current
     val fonts = LocalPamFonts.current
-    Row(
+    if (items.isEmpty()) return
+
+    val gap = 4.dp
+    val rowHeight = if (items.any { it.sub != null }) 52.dp else 44.dp
+    val selectedIndex = items.indexOfFirst { it.value == selected }.coerceAtLeast(0)
+
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
             .background(pal.bg2, CircleShape)
             .border(PamBorderWidth, pal.line, CircleShape)
             .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        items.forEach { item ->
-            val sel = item.value == selected
-            val interaction = remember { MutableInteractionSource() }
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(if (item.sub != null) 52.dp else 44.dp)
-                    .graphicsLayer {
-                        if (sel) { shadowElevation = 1.dp.toPx(); shape = CircleShape; clip = false }
-                    }
-                    .background(if (sel) pal.surface else Color.Transparent, CircleShape)
-                    .then(if (sel) Modifier.border(PamBorderWidth, pal.line, CircleShape) else Modifier)
-                    // No ripple: the design system's press feedback is fill/scale only.
-                    .clickable(interactionSource = interaction, indication = null) { onSelect(item.value) },
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (item.icon != null) {
-                        Icon(
-                            item.icon, contentDescription = null,
-                            tint = if (sel) pal.baseOf(item.iconTone) else pal.ink3,
-                            modifier = Modifier.size(18.dp),
+        // Fixed widths (not weights) so the travelling pill and the labels are
+        // measured from the same arithmetic and can never drift apart.
+        val itemWidth = (maxWidth - gap * (items.size - 1)) / items.size
+        val pillOffset by animateDpAsState(
+            targetValue = (itemWidth + gap) * selectedIndex,
+            animationSpec = PamMotion.spatial(),
+            label = "segmentPill",
+        )
+
+        Box(
+            modifier = Modifier
+                .offset(x = pillOffset)
+                .width(itemWidth)
+                .height(rowHeight)
+                .graphicsLayer { shadowElevation = 1.dp.toPx(); shape = CircleShape; clip = false }
+                .background(pal.surface, CircleShape)
+                .border(PamBorderWidth, pal.line, CircleShape),
+        )
+
+        Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+            items.forEachIndexed { index, item ->
+                val sel = index == selectedIndex
+                val interaction = remember { MutableInteractionSource() }
+                val pressed by interaction.collectIsPressedAsState()
+                val scale = pressScale(pressed, 0.97f)
+                val iconTint by animateColorAsState(
+                    if (sel) pal.baseOf(item.iconTone) else pal.ink3,
+                    animationSpec = PamMotion.standard(), label = "segmentIcon",
+                )
+                val labelColor by animateColorAsState(
+                    if (sel) pal.ink else pal.ink2,
+                    animationSpec = PamMotion.standard(), label = "segmentLabel",
+                )
+                Column(
+                    modifier = Modifier
+                        .width(itemWidth)
+                        .height(rowHeight)
+                        .graphicsLayer { scaleX = scale; scaleY = scale }
+                        // No ripple: the design system's press feedback is fill/scale only.
+                        .clickable(interactionSource = interaction, indication = null) { onSelect(item.value) },
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (item.icon != null) {
+                            Icon(
+                                item.icon, contentDescription = null,
+                                tint = iconTint,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                        Text(
+                            item.label,
+                            fontFamily = fonts.display, fontWeight = FontWeight.Bold, fontSize = 15.sp,
+                            color = labelColor, maxLines = 1,
                         )
                     }
-                    Text(
-                        item.label,
-                        fontFamily = fonts.display, fontWeight = FontWeight.Bold, fontSize = 15.sp,
-                        color = if (sel) pal.ink else pal.ink2, maxLines = 1,
-                    )
-                }
-                if (item.sub != null) {
-                    Text(item.sub, fontFamily = fonts.mono, fontSize = 11.sp, color = pal.ink3, maxLines = 1)
+                    if (item.sub != null) {
+                        Text(item.sub, fontFamily = fonts.mono, fontSize = 11.sp, color = pal.ink3, maxLines = 1)
+                    }
                 }
             }
         }

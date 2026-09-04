@@ -40,6 +40,7 @@ import ph.jeepfare.ui.theme.LocalPamFonts
 import ph.jeepfare.ui.theme.LocalPamPalette
 import ph.jeepfare.ui.theme.PamIcons
 import ph.jeepfare.ui.theme.PamTone
+import ph.jeepfare.ui.theme.pamEnter
 
 @Composable
 fun RatesScreen(onBack: () -> Unit) {
@@ -53,14 +54,20 @@ fun RatesScreen(onBack: () -> Unit) {
                 .padding(padding)
                 .verticalScroll(rememberScrollState()),
         ) {
-            PamTopBar(Strings.RATES_TITLE, onBack = onBack)
+            PamTopBar(Strings.RATES_TITLE, onBack = onBack, modifier = Modifier.pamEnter(index = 0))
             Column(
                 modifier = Modifier.padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Row { PamChip(Strings.RATES_EFFECTIVE_CHIP, tone = PamTone.YELLOW, icon = PamIcons.Event) }
+                Row(Modifier.pamEnter(index = 1)) {
+                    PamChip(Strings.RATES_EFFECTIVE_CHIP, tone = PamTone.YELLOW, icon = PamIcons.Event)
+                }
 
-                PamCard(overline = Strings.RATES_OVERLINE, stripe = true) {
+                PamCard(
+                    overline = Strings.RATES_OVERLINE,
+                    stripe = true,
+                    modifier = Modifier.pamEnter(index = 2),
+                ) {
                     Column {
                         RateTableHeader()
                         HorizontalDivider(thickness = 1.5.dp, color = pal.line)
@@ -76,7 +83,7 @@ fun RatesScreen(onBack: () -> Unit) {
                     }
                 }
 
-                PamCard(overline = Strings.RATES_DISCOUNT_OVERLINE) {
+                PamCard(overline = Strings.RATES_DISCOUNT_OVERLINE, modifier = Modifier.pamEnter(index = 3)) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         DiscountRow(
                             PamIcons.School, Strings.passengerTypeLabel(PassengerType.STUDENT),
@@ -98,7 +105,12 @@ fun RatesScreen(onBack: () -> Unit) {
                     }
                 }
 
-                PamCallout(Strings.RATES_CALLOUT, tone = PamTone.BLUE, icon = PamIcons.Info)
+                PamCallout(
+                    Strings.RATES_CALLOUT,
+                    tone = PamTone.BLUE,
+                    icon = PamIcons.Info,
+                    modifier = Modifier.pamEnter(index = 4),
+                )
 
                 Text(
                     androidx.compose.ui.text.buildAnnotatedString {
@@ -109,7 +121,7 @@ fun RatesScreen(onBack: () -> Unit) {
                         append(Strings.RATES_SOURCE_SUFFIX)
                     },
                     fontFamily = fonts.body, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = pal.ink2,
-                    modifier = Modifier.padding(horizontal = 4.dp),
+                    modifier = Modifier.padding(horizontal = 4.dp).pamEnter(index = 5),
                 )
                 Spacer(Modifier.height(12.dp))
             }

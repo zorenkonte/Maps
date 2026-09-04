@@ -26,11 +26,11 @@ import ph.jeepfare.ui.theme.PamIcons
 
 /** Hero header: red jeepney mark with thin stripe trim, Baloo wordmark, tagline. */
 @Composable
-fun PamHeroTopBar(trailing: @Composable () -> Unit = {}) {
+fun PamHeroTopBar(modifier: Modifier = Modifier, trailing: @Composable () -> Unit = {}) {
     val pal = LocalPamPalette.current
     val fonts = LocalPamFonts.current
     Row(
-        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 10.dp),
+        modifier = modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 10.dp),
         horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -62,11 +62,16 @@ fun PamHeroTopBar(trailing: @Composable () -> Unit = {}) {
 
 /** Standard header: back button, Baloo title, trailing action. */
 @Composable
-fun PamTopBar(title: String, onBack: (() -> Unit)? = null, trailing: @Composable () -> Unit = {}) {
+fun PamTopBar(
+    title: String,
+    onBack: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+    trailing: @Composable () -> Unit = {},
+) {
     val pal = LocalPamPalette.current
     val fonts = LocalPamFonts.current
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
         horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
