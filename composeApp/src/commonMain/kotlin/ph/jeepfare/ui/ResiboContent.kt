@@ -1,6 +1,8 @@
 package ph.jeepfare.ui
 
 import ph.jeepfare.domain.FareBreakdown
+import ph.jeepfare.domain.PassengerType
+import ph.jeepfare.domain.TripParty
 import ph.jeepfare.domain.toPesoString
 import ph.jeepfare.ui.components.ResiboRow
 
@@ -8,8 +10,21 @@ const val PESO = "₱"
 
 fun Double.peso(): String = PESO + toPesoString()
 
-/** Receipt lines for a fare breakdown + the index the pre-passenger divider goes before. */
-fun resiboRows(b: FareBreakdown): Pair<List<ResiboRow>, Int?> {
+/** What one rider of [type] pays on this trip. */
+fun FareBreakdown.fareFor(type: PassengerType): Double =
+    if (type.discounted) discountedFare else regularFare
+
+/** "TOTAL" once companions are involved; a lone commuter just sees their own fare. */
+fun totalLabelFor(party: TripParty): String =
+    if (party.companionCount > 0) Strings.RESIBO_TOTAL else Strings.RESIBO_YOUR_FARE
+
+/**
+ * Receipt lines for a fare breakdown + the index the pre-rider divider goes before.
+ *
+ * The commuter's own line comes first and is labelled "You", so the fare they
+ * hand over is the one they read first; companions follow as separate lines.
+ */
+fun resiboRows(b: FareBreakdown, party: TripParty): Pair<List<ResiboRow>, Int?> {
     val rows = mutableListOf(
         ResiboRow(Strings.BASE_FARE_LABEL.replace("%d", b.rate.baseKm.toString()), b.rate.baseFare.peso()),
     )
@@ -19,26 +34,40 @@ fun resiboRows(b: FareBreakdown): Pair<List<ResiboRow>, Int?> {
             b.extraCharge.peso(),
         )
     }
-    rows += ResiboRow(Strings.PER_HEAD_LABEL, b.regularFare.peso(), strong = true)
-    val dividerAt = if (b.passengers.isNotEmpty()) rows.size else null
-    b.passengers.forEach { line ->
-        val disc = if (line.type.discounted) Strings.DISCOUNT_SUFFIX else ""
+    // The undiscounted per-rider fare is only worth a line when something is
+    // measured against it — a discount, or more than one rider.
+    if (party.riderCount > 1 || party.myFareType.discounted) {
+        // Not `strong`: the emphasized line on a commuter's receipt is their own.
+        rows += ResiboRow(Strings.FULL_FARE_LABEL, b.regularFare.peso())
+    }
+
+    val dividerAt = rows.size
+    rows += ResiboRow(
+        Strings.YOU_LABEL.replace("%s", Strings.passengerTypeLabel(party.myFareType)) +
+            (if (party.myFareType.discounted) Strings.DISCOUNT_SUFFIX else ""),
+        b.fareFor(party.myFareType).peso(),
+        strong = true,
+    )
+    PassengerType.entries.forEach { type ->
+        val count = party.companionsOf(type)
+        if (count <= 0) return@forEach
+        val disc = if (type.discounted) Strings.DISCOUNT_SUFFIX else ""
         rows += ResiboRow(
-            "${Strings.passengerTypeLabel(line.type)} × ${line.count}$disc",
-            line.subtotal.peso(),
+            "${Strings.passengerTypeLabel(type)} × $count$disc",
+            (b.fareFor(type) * count).peso(),
         )
     }
     return rows to dividerAt
 }
 
 /** Plain-text version of the resibo for the platform share sheet. */
-fun resiboShareText(b: FareBreakdown, dateLabel: String): String = buildString {
-    appendLine("PAMASAHE — resibo")
+fun resiboShareText(b: FareBreakdown, party: TripParty, dateLabel: String): String = buildString {
+    appendLine(Strings.RECEIPT_SHARE_HEADER)
     appendLine("${Strings.jeepneyTypeLong(b.jeepneyType)} · ${formatKm(b.distanceKm)} km · $dateLabel")
     appendLine("----------------------------")
-    resiboRows(b).first.forEach { row -> appendLine("${row.label}: ${row.value}") }
+    resiboRows(b, party).first.forEach { row -> appendLine("${row.label}: ${row.value}") }
     appendLine("----------------------------")
-    appendLine("${Strings.RESIBO_TOTAL}: ${b.total.peso()}")
+    appendLine("${totalLabelFor(party)}: ${b.total.peso()}")
     appendLine(Strings.FARE_MATRIX_NOTE)
     append(Strings.RESIBO_FOOTER)
 }

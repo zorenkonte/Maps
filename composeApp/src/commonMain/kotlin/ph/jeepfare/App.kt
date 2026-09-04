@@ -14,9 +14,10 @@ import ph.jeepfare.data.OsrmClient
 import ph.jeepfare.domain.FareBreakdown
 import ph.jeepfare.domain.JeepneyType
 import ph.jeepfare.domain.PassengerType
+import ph.jeepfare.domain.TripParty
 import ph.jeepfare.ui.CalculatorScreen
 import ph.jeepfare.ui.DistanceInputMode
-import ph.jeepfare.ui.MAX_PASSENGERS_PER_TYPE
+import ph.jeepfare.ui.MAX_COMPANIONS_PER_TYPE
 import ph.jeepfare.ui.MapDistance
 import ph.jeepfare.ui.MapPickerScreen
 import ph.jeepfare.ui.RatesScreen
@@ -50,25 +51,31 @@ fun App() {
         }
         // Receipt snapshot is not saveable; after process death we land back on the calculator.
         var receiptBreakdown by remember { mutableStateOf<FareBreakdown?>(null) }
+        var receiptParty by remember { mutableStateOf(TripParty()) }
 
-        var regularCount by rememberSaveable { mutableStateOf(1) }
-        var studentCount by rememberSaveable { mutableStateOf(0) }
-        var seniorCount by rememberSaveable { mutableStateOf(0) }
-        var pwdCount by rememberSaveable { mutableStateOf(0) }
+        // The commuter's own fare type, plus anyone they are paying for.
+        var myFareType by rememberSaveable { mutableStateOf(PassengerType.REGULAR) }
+        var regularCompanions by rememberSaveable { mutableStateOf(0) }
+        var studentCompanions by rememberSaveable { mutableStateOf(0) }
+        var seniorCompanions by rememberSaveable { mutableStateOf(0) }
+        var pwdCompanions by rememberSaveable { mutableStateOf(0) }
 
-        val counts = mapOf(
-            PassengerType.REGULAR to regularCount,
-            PassengerType.STUDENT to studentCount,
-            PassengerType.SENIOR to seniorCount,
-            PassengerType.PWD to pwdCount,
+        val party = TripParty(
+            myFareType = myFareType,
+            companions = mapOf(
+                PassengerType.REGULAR to regularCompanions,
+                PassengerType.STUDENT to studentCompanions,
+                PassengerType.SENIOR to seniorCompanions,
+                PassengerType.PWD to pwdCompanions,
+            ),
         )
-        val onCountChange: (PassengerType, Int) -> Unit = { type, value ->
-            val clamped = value.coerceIn(0, MAX_PASSENGERS_PER_TYPE)
+        val onCompanionCountChange: (PassengerType, Int) -> Unit = { type, value ->
+            val clamped = value.coerceIn(0, MAX_COMPANIONS_PER_TYPE)
             when (type) {
-                PassengerType.REGULAR -> regularCount = clamped
-                PassengerType.STUDENT -> studentCount = clamped
-                PassengerType.SENIOR -> seniorCount = clamped
-                PassengerType.PWD -> pwdCount = clamped
+                PassengerType.REGULAR -> regularCompanions = clamped
+                PassengerType.STUDENT -> studentCompanions = clamped
+                PassengerType.SENIOR -> seniorCompanions = clamped
+                PassengerType.PWD -> pwdCompanions = clamped
             }
         }
 
@@ -93,7 +100,11 @@ fun App() {
             Screen.RECEIPT -> {
                 val breakdown = receiptBreakdown
                 if (breakdown != null) {
-                    ReceiptScreen(breakdown = breakdown, onBack = { screen = Screen.CALCULATOR })
+                    ReceiptScreen(
+                        breakdown = breakdown,
+                        party = receiptParty,
+                        onBack = { screen = Screen.CALCULATOR },
+                    )
                 } else {
                     // Snapshot lost (e.g. process death) — fall back to the calculator.
                     screen = Screen.CALCULATOR
@@ -108,13 +119,15 @@ fun App() {
                 onManualKmTextChange = { manualKmText = it },
                 mapDistance = mapDistance,
                 onPickOnMap = { screen = Screen.MAP_PICKER },
-                passengerCounts = counts,
-                onPassengerCountChange = onCountChange,
+                party = party,
+                onFareTypeChange = { myFareType = it },
+                onCompanionCountChange = onCompanionCountChange,
                 isDark = isDark,
                 onToggleDark = { darkOverride = !isDark },
                 onOpenRates = { screen = Screen.RATES },
                 onShare = { breakdown ->
                     receiptBreakdown = breakdown
+                    receiptParty = party
                     screen = Screen.RECEIPT
                 },
             )

@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import ph.jeepfare.domain.FareRules
 import ph.jeepfare.domain.JeepneyType
+import ph.jeepfare.domain.PassengerType
 import ph.jeepfare.ui.components.PamCallout
 import ph.jeepfare.ui.components.PamCard
 import ph.jeepfare.ui.components.PamChip
@@ -77,9 +78,18 @@ fun RatesScreen(onBack: () -> Unit) {
 
                 PamCard(overline = Strings.RATES_DISCOUNT_OVERLINE) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        DiscountRow(PamIcons.School, "Estudyante", pal.blueDeep, pal.blueTint)
-                        DiscountRow(PamIcons.Elderly, "Senior Citizen", pal.yellowDeep, pal.yellowTint)
-                        DiscountRow(PamIcons.Accessible, "PWD", pal.red, pal.redTint)
+                        DiscountRow(
+                            PamIcons.School, Strings.passengerTypeLabel(PassengerType.STUDENT),
+                            pal.blueDeep, pal.blueTint,
+                        )
+                        DiscountRow(
+                            PamIcons.Elderly, Strings.passengerTypeLabel(PassengerType.SENIOR),
+                            pal.yellowDeep, pal.yellowTint,
+                        )
+                        DiscountRow(
+                            PamIcons.Accessible, Strings.passengerTypeLabel(PassengerType.PWD),
+                            pal.red, pal.redTint,
+                        )
                         Text(
                             Strings.RATES_DISCOUNT_NOTE,
                             fontFamily = fonts.body, fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp,

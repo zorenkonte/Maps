@@ -240,7 +240,7 @@ fun PamCallout(
     }
 }
 
-/** Passenger count row: tinted icon box, label + discount note, − count +. */
+/** Rider count row: tinted icon box, label + discount note, − count +. */
 @Composable
 fun PamStepper(
     icon: ImageVector,
@@ -250,7 +250,7 @@ fun PamStepper(
     value: Int,
     onValueChange: (Int) -> Unit,
     min: Int = 0,
-    max: Int = 30,
+    max: Int = 8,
 ) {
     val pal = LocalPamPalette.current
     val fonts = LocalPamFonts.current
@@ -271,13 +271,21 @@ fun PamStepper(
                 Text(chip, fontFamily = fonts.body, fontWeight = FontWeight.ExtraBold, fontSize = 11.5.sp, color = pal.deepOf(tone))
             }
         }
-        StepperButton(ph.jeepfare.ui.theme.PamIcons.Remove, "bawasan $label", enabled = value > min) { onValueChange(value - 1) }
+        StepperButton(
+            ph.jeepfare.ui.theme.PamIcons.Remove,
+            ph.jeepfare.ui.Strings.STEPPER_DECREASE.replace("%s", label),
+            enabled = value > min,
+        ) { onValueChange(value - 1) }
         Text(
             "$value",
             fontFamily = fonts.mono, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = pal.ink,
             textAlign = TextAlign.Center, modifier = Modifier.width(34.dp),
         )
-        StepperButton(ph.jeepfare.ui.theme.PamIcons.Add, "dagdagan $label", enabled = value < max) { onValueChange(value + 1) }
+        StepperButton(
+            ph.jeepfare.ui.theme.PamIcons.Add,
+            ph.jeepfare.ui.Strings.STEPPER_INCREASE.replace("%s", label),
+            enabled = value < max,
+        ) { onValueChange(value + 1) }
     }
 }
 
@@ -298,6 +306,93 @@ private fun StepperButton(icon: ImageVector, contentDescription: String, enabled
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, contentDescription = contentDescription, tint = if (enabled) pal.ink else pal.ink3, modifier = Modifier.size(20.dp))
+    }
+}
+
+data class PamChoiceItem<T>(
+    val value: T,
+    val label: String,
+    val icon: ImageVector,
+    val tone: PamTone = PamTone.BLUE,
+    val note: String? = null,
+)
+
+/**
+ * Single-select tile grid — "which one am I?" rather than "how many of each".
+ * Tiles wrap into rows of [columns]; the selected one fills with its signage
+ * tint and takes a deep border, unselected tiles sit on the cream track color.
+ */
+@Composable
+fun <T> PamChoiceGrid(
+    items: List<PamChoiceItem<T>>,
+    selected: T,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+    columns: Int = 2,
+) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        items.chunked(columns).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                row.forEach { item ->
+                    PamChoiceTile(
+                        item = item,
+                        selected = item.value == selected,
+                        onClick = { onSelect(item.value) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                // Keep a short final row aligned with the columns above it.
+                repeat(columns - row.size) { Box(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun <T> PamChoiceTile(
+    item: PamChoiceItem<T>,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val pal = LocalPamPalette.current
+    val fonts = LocalPamFonts.current
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale = pressScale(pressed, 0.97f)
+    val shape = RoundedCornerShape(16.dp)
+
+    Row(
+        modifier = modifier
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .height(60.dp)
+            .background(if (selected) pal.tintOf(item.tone) else pal.bg2, shape)
+            .border(PamBorderWidth, if (selected) pal.deepOf(item.tone) else pal.line, shape)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            item.icon,
+            contentDescription = null,
+            tint = if (selected) pal.deepOf(item.tone) else pal.ink3,
+            modifier = Modifier.size(22.dp),
+        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                item.label,
+                fontFamily = fonts.display, fontWeight = FontWeight.Bold, fontSize = 15.sp, lineHeight = 18.sp,
+                color = if (selected) pal.ink else pal.ink2, maxLines = 1,
+            )
+            if (item.note != null) {
+                Text(
+                    item.note,
+                    fontFamily = fonts.body, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp,
+                    color = if (selected) pal.deepOf(item.tone) else pal.ink3, maxLines = 1,
+                )
+            }
+        }
     }
 }
 

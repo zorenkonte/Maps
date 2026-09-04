@@ -28,6 +28,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ph.jeepfare.domain.FareBreakdown
+import ph.jeepfare.domain.TripParty
 import ph.jeepfare.rememberShareText
 import ph.jeepfare.currentDateLabel
 import ph.jeepfare.ui.components.PamButton
@@ -41,14 +42,14 @@ import ph.jeepfare.ui.theme.LocalPamPalette
 import ph.jeepfare.ui.theme.PamIcons
 
 @Composable
-fun ReceiptScreen(breakdown: FareBreakdown, onBack: () -> Unit) {
+fun ReceiptScreen(breakdown: FareBreakdown, party: TripParty, onBack: () -> Unit) {
     val pal = LocalPamPalette.current
     val fonts = LocalPamFonts.current
     val shareText = rememberShareText()
     val clipboard = LocalClipboardManager.current
     val dateLabel = remember { currentDateLabel() }
     var saved by remember { mutableStateOf(false) }
-    // "Na-save!" is transient feedback, not a permanent label change.
+    // "Copied!" is transient feedback, not a permanent label change.
     androidx.compose.runtime.LaunchedEffect(saved) {
         if (saved) {
             kotlinx.coroutines.delay(2000)
@@ -56,7 +57,7 @@ fun ReceiptScreen(breakdown: FareBreakdown, onBack: () -> Unit) {
         }
     }
 
-    val (rows, dividerAt) = resiboRows(breakdown)
+    val (rows, dividerAt) = resiboRows(breakdown, party)
     val allRows = listOf(ResiboRow(dateLabel, "", muted = true)) + rows
     val shiftedDivider = dividerAt?.plus(1)
 
@@ -82,7 +83,7 @@ fun ReceiptScreen(breakdown: FareBreakdown, onBack: () -> Unit) {
                     sub = "${Strings.jeepneyTypeLong(breakdown.jeepneyType)} · ${formatKm(breakdown.distanceKm)} km",
                     rows = allRows,
                     dividerBeforeIndex = shiftedDivider,
-                    totalLabel = Strings.RESIBO_TOTAL,
+                    totalLabel = totalLabelFor(party),
                     totalValue = breakdown.total.peso(),
                     footer = Strings.RESIBO_FOOTER,
                     pop = true,
@@ -90,16 +91,16 @@ fun ReceiptScreen(breakdown: FareBreakdown, onBack: () -> Unit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     PamButton(
                         Strings.SHARE,
-                        onClick = { shareText(resiboShareText(breakdown, dateLabel)) },
+                        onClick = { shareText(resiboShareText(breakdown, party, dateLabel)) },
                         icon = PamIcons.Share,
                         modifier = Modifier.weight(1f),
                     )
                     PamButton(
                         if (saved) Strings.SAVED else Strings.SAVE,
                         onClick = {
-                            // "Save" lands the resibo text on the clipboard — no storage
+                            // "Copy" lands the receipt text on the clipboard — no storage
                             // permission needed, and it pastes anywhere.
-                            clipboard.setText(AnnotatedString(resiboShareText(breakdown, dateLabel)))
+                            clipboard.setText(AnnotatedString(resiboShareText(breakdown, party, dateLabel)))
                             saved = true
                         },
                         icon = PamIcons.Download,

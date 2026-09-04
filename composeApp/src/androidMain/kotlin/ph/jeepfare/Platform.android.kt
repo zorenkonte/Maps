@@ -19,8 +19,7 @@ actual fun rememberShareText(): (String) -> Unit {
     }
 }
 
-actual fun currentDateLabel(): String {
-    val fil = Locale.forLanguageTag("fil-PH")
-    val locale = if (fil.language.isNotEmpty()) fil else Locale.getDefault()
-    return SimpleDateFormat("MMM d, yyyy · h:mm a", locale).format(Date())
-}
+actual fun currentDateLabel(): String =
+    // The UI is English-only, so the receipt date is formatted in English too
+    // rather than in the device locale.
+    SimpleDateFormat("MMM d, yyyy · h:mm a", Locale.ENGLISH).format(Date())

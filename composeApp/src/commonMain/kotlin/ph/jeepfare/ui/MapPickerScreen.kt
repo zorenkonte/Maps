@@ -284,7 +284,7 @@ fun MapPickerScreen(
                     ResiboDivider(Modifier.padding(top = 8.dp, bottom = 10.dp))
 
                     val ready = routeState as? RouteState.Ready
-                    // Guard the calculator's cap here too, so "Gamitin" can never hand
+                    // Guard the calculator's cap here too, so "Use this" can never hand
                     // back a distance the calculator will silently reject.
                     val tooFar = ready != null && ready.distance.distanceKm > MAX_DISTANCE_KM
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {

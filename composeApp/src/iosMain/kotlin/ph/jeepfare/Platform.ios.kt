@@ -6,7 +6,6 @@ import platform.CoreGraphics.CGRectMake
 import platform.Foundation.NSDate
 import platform.Foundation.NSDateFormatter
 import platform.Foundation.NSLocale
-import platform.Foundation.currentLocale
 import platform.UIKit.UIActivityViewController
 import platform.UIKit.UIApplication
 import platform.UIKit.UIPopoverArrowDirectionAny
@@ -33,7 +32,8 @@ actual fun rememberShareText(): (String) -> Unit = { text ->
 actual fun currentDateLabel(): String {
     val formatter = NSDateFormatter().apply {
         dateFormat = "MMM d, yyyy · h:mm a"
-        locale = NSLocale.currentLocale
+        // English-only UI: don't follow the device locale.
+        locale = NSLocale(localeIdentifier = "en_US")
     }
     return formatter.stringFromDate(NSDate())
 }

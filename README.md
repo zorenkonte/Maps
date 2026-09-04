@@ -1,11 +1,16 @@
 # Pamasahe 🚌
 
-**Jeepney fare calculator para sa mga pasahero ng Pilipinas.**
+**A jeepney fare calculator for Philippine commuters.**
 
 A Kotlin Multiplatform (Android + iOS) app that computes jeepney fares from the
-official LTFRB fare matrix — pick your ride and drop-off on a map (or type the
-distance), set who's riding, and see the full fare breakdown so you know
-exactly what you should be paying.
+official LTFRB fare matrix — pick your pick-up and drop-off on a map (or type
+the distance), say which fare you qualify for, and see the full breakdown so
+you know exactly what you should be paying.
+
+It is built for the person *riding* the jeep, not the one driving it: you pick
+your own fare type once and the receipt leads with **your fare**. Paying for
+other people is possible but optional and tucked away, so the app never reads
+like a conductor's tally sheet.
 
 ## Features
 
@@ -16,15 +21,17 @@ exactly what you should be paying.
   | Traditional | ₱14.00 | ₱2.00 |
   | Modern | ₱17.00 | ₱2.40 |
 
-- **Map picker** — tap your *sakayan* and *babaan* on a MapLibre map
+- **Map picker** — tap your pick-up and drop-off on a MapLibre map
   (OpenFreeMap tiles, no API key); route distance comes from the public OSRM
   router, with a straight-line ×1.3 estimate as offline fallback.
 - **Manual distance entry** — no signal? Type the kilometers directly.
-- **Group fares** — count Regular / Estudyante / Senior Citizen / PWD
-  passengers separately; the 20% discount is applied automatically.
+- **Your fare type** — pick Regular / Student / Senior / PWD once; the 20%
+  discount is applied automatically.
+- **Optional companions** — covering someone else's fare? Add up to 8 riders
+  per fare type; otherwise the app assumes you're riding alone.
 - **Itemized breakdown** — base fare, extra kilometers × rate, discounts, and
-  the total, so overcharging is easy to spot.
-- **Taglish UI** 🇵🇭
+  your own line on the receipt, so overcharging is easy to spot.
+- **English UI**
 
 ## Tech stack
 
