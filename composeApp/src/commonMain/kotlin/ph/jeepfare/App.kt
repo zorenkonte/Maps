@@ -1,6 +1,10 @@
 package ph.jeepfare
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -9,6 +13,7 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import ph.jeepfare.data.OsrmClient
 import ph.jeepfare.domain.FareBreakdown
@@ -22,9 +27,21 @@ import ph.jeepfare.ui.MapDistance
 import ph.jeepfare.ui.MapPickerScreen
 import ph.jeepfare.ui.RatesScreen
 import ph.jeepfare.ui.ReceiptScreen
+import ph.jeepfare.ui.theme.LocalPamPalette
 import ph.jeepfare.ui.theme.PamasaheTheme
+import ph.jeepfare.ui.theme.pamScreenTransform
 
-private enum class Screen { CALCULATOR, MAP_PICKER, RATES, RECEIPT }
+/**
+ * [depth] is what the screen transition reads: leaving the calculator pushes
+ * forward, coming back to it pops. Every secondary screen sits one level deep,
+ * so no screen ever slides "sideways into itself".
+ */
+private enum class Screen(val depth: Int) {
+    CALCULATOR(0),
+    MAP_PICKER(1),
+    RATES(1),
+    RECEIPT(1),
+}
 
 private val MapDistanceSaver = listSaver<MapDistance?, Any>(
     save = { value -> value?.let { listOf(it.distanceKm, it.isEstimate) } ?: emptyList() },
@@ -86,51 +103,65 @@ fun App() {
         // System back returns to the calculator instead of leaving the app.
         BackHandler(enabled = screen != Screen.CALCULATOR) { screen = Screen.CALCULATOR }
 
-        when (screen) {
-            Screen.MAP_PICKER -> MapPickerScreen(
-                osrmClient = osrmClient,
-                onUseDistance = { picked ->
-                    mapDistance = picked
-                    inputMode = DistanceInputMode.MAP
-                    screen = Screen.CALCULATOR
-                },
-                onBack = { screen = Screen.CALCULATOR },
-            )
-            Screen.RATES -> RatesScreen(onBack = { screen = Screen.CALCULATOR })
-            Screen.RECEIPT -> {
-                val breakdown = receiptBreakdown
-                if (breakdown != null) {
-                    ReceiptScreen(
-                        breakdown = breakdown,
-                        party = receiptParty,
-                        onBack = { screen = Screen.CALCULATOR },
-                    )
-                } else {
-                    // Snapshot lost (e.g. process death) — fall back to the calculator.
-                    screen = Screen.CALCULATOR
+        // Screens are pushed and popped rather than swapped: the direction comes
+        // from the depth difference, so system back animates as a pop for free.
+        AnimatedContent(
+            targetState = screen,
+            transitionSpec = {
+                pamScreenTransform(forward = targetState.depth > initialState.depth)
+                    // The two screens overlap during the push; a size crossfade
+                    // on top of that would make the whole frame breathe.
+                    .using(SizeTransform(clip = false))
+            },
+            modifier = Modifier.fillMaxSize().background(LocalPamPalette.current.bg),
+            label = "screen",
+        ) { current ->
+            when (current) {
+                Screen.MAP_PICKER -> MapPickerScreen(
+                    osrmClient = osrmClient,
+                    onUseDistance = { picked ->
+                        mapDistance = picked
+                        inputMode = DistanceInputMode.MAP
+                        screen = Screen.CALCULATOR
+                    },
+                    onBack = { screen = Screen.CALCULATOR },
+                )
+                Screen.RATES -> RatesScreen(onBack = { screen = Screen.CALCULATOR })
+                Screen.RECEIPT -> {
+                    val breakdown = receiptBreakdown
+                    if (breakdown != null) {
+                        ReceiptScreen(
+                            breakdown = breakdown,
+                            party = receiptParty,
+                            onBack = { screen = Screen.CALCULATOR },
+                        )
+                    } else {
+                        // Snapshot lost (e.g. process death) — fall back to the calculator.
+                        screen = Screen.CALCULATOR
+                    }
                 }
+                Screen.CALCULATOR -> CalculatorScreen(
+                    jeepneyType = jeepneyType,
+                    onJeepneyTypeChange = { jeepneyType = it },
+                    inputMode = inputMode,
+                    onInputModeChange = { inputMode = it },
+                    manualKmText = manualKmText,
+                    onManualKmTextChange = { manualKmText = it },
+                    mapDistance = mapDistance,
+                    onPickOnMap = { screen = Screen.MAP_PICKER },
+                    party = party,
+                    onFareTypeChange = { myFareType = it },
+                    onCompanionCountChange = onCompanionCountChange,
+                    isDark = isDark,
+                    onToggleDark = { darkOverride = !isDark },
+                    onOpenRates = { screen = Screen.RATES },
+                    onShare = { breakdown ->
+                        receiptBreakdown = breakdown
+                        receiptParty = party
+                        screen = Screen.RECEIPT
+                    },
+                )
             }
-            Screen.CALCULATOR -> CalculatorScreen(
-                jeepneyType = jeepneyType,
-                onJeepneyTypeChange = { jeepneyType = it },
-                inputMode = inputMode,
-                onInputModeChange = { inputMode = it },
-                manualKmText = manualKmText,
-                onManualKmTextChange = { manualKmText = it },
-                mapDistance = mapDistance,
-                onPickOnMap = { screen = Screen.MAP_PICKER },
-                party = party,
-                onFareTypeChange = { myFareType = it },
-                onCompanionCountChange = onCompanionCountChange,
-                isDark = isDark,
-                onToggleDark = { darkOverride = !isDark },
-                onOpenRates = { screen = Screen.RATES },
-                onShare = { breakdown ->
-                    receiptBreakdown = breakdown
-                    receiptParty = party
-                    screen = Screen.RECEIPT
-                },
-            )
         }
     }
 }

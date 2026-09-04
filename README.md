@@ -31,6 +31,10 @@ like a conductor's tally sheet.
   per fare type; otherwise the app assumes you're riding alone.
 - **Itemized breakdown** — base fare, extra kilometers × rate, discounts, and
   your own line on the receipt, so overcharging is easy to spot.
+- **Motion that explains itself** — screens push and pop, the segmented pill
+  slides between options, companion rows unfold, and the resibo rises into
+  place when a fare is ready. All specs live in one file,
+  [`Motion.kt`](composeApp/src/commonMain/kotlin/ph/jeepfare/ui/theme/Motion.kt).
 - **English UI**
 
 ## Tech stack

@@ -1,7 +1,10 @@
 package ph.jeepfare.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -73,7 +76,13 @@ import ph.jeepfare.ui.theme.LocalPamFonts
 import ph.jeepfare.ui.theme.LocalPamPalette
 import ph.jeepfare.ui.theme.PamBorderWidth
 import ph.jeepfare.ui.theme.PamIcons
+import ph.jeepfare.ui.theme.PamMotion
 import ph.jeepfare.ui.theme.PamTone
+import ph.jeepfare.ui.theme.pamEnter
+import ph.jeepfare.ui.theme.pamPanelEnter
+import ph.jeepfare.ui.theme.pamRevealEnter
+import ph.jeepfare.ui.theme.pamRevealExit
+import ph.jeepfare.ui.theme.pamSwap
 
 private const val STYLE_URL = "https://tiles.openfreemap.org/styles/liberty"
 
@@ -226,7 +235,9 @@ fun MapPickerScreen(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .statusBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    // Negative offset: the bar settles down onto the map.
+                    .pamEnter(offset = (-16).dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -260,73 +271,108 @@ fun MapPickerScreen(
                 )
             }
 
-            // Bottom panel: tap hint chip + route card.
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+            // Bottom panel: tap hint chip + route card. It rides up from the
+            // bottom edge once the map is on screen, the way a sheet arrives.
+            var panelShown by remember { mutableStateOf(false) }
+            LaunchedEffect(Unit) { panelShown = true }
+            AnimatedVisibility(
+                visible = panelShown,
+                enter = pamPanelEnter(),
+                modifier = Modifier.align(Alignment.BottomCenter),
             ) {
-                Box(Modifier.align(Alignment.CenterHorizontally)) {
-                    PamChip(Strings.MAP_TAP_HINT, tone = PamTone.NEUTRAL, icon = PamIcons.TouchApp)
-                }
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .shadow(8.dp, RoundedCornerShape(20.dp))
-                        .background(pal.surface, RoundedCornerShape(20.dp))
-                        .border(PamBorderWidth, pal.line, RoundedCornerShape(20.dp))
-                        .padding(14.dp),
+                        .navigationBarsPadding()
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    EndpointRow(PamIcons.MyLocation, pal.green, Strings.ORIGIN_LABEL, currentOrigin)
-                    EndpointRow(PamIcons.PinDrop, pal.red, Strings.DESTINATION_LABEL, currentDestination)
-                    ResiboDivider(Modifier.padding(top = 8.dp, bottom = 10.dp))
+                    Box(Modifier.align(Alignment.CenterHorizontally)) {
+                        PamChip(Strings.MAP_TAP_HINT, tone = PamTone.NEUTRAL, icon = PamIcons.TouchApp)
+                    }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .shadow(8.dp, RoundedCornerShape(20.dp))
+                            .background(pal.surface, RoundedCornerShape(20.dp))
+                            .border(PamBorderWidth, pal.line, RoundedCornerShape(20.dp))
+                            .padding(14.dp),
+                    ) {
+                        EndpointRow(PamIcons.MyLocation, pal.green, Strings.ORIGIN_LABEL, currentOrigin)
+                        EndpointRow(PamIcons.PinDrop, pal.red, Strings.DESTINATION_LABEL, currentDestination)
+                        ResiboDivider(Modifier.padding(top = 8.dp, bottom = 10.dp))
 
-                    val ready = routeState as? RouteState.Ready
-                    // Guard the calculator's cap here too, so "Use this" can never hand
-                    // back a distance the calculator will silently reject.
-                    val tooFar = ready != null && ready.distance.distanceKm > MAX_DISTANCE_KM
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        when (routeState) {
-                            is RouteState.Loading -> {
-                                CircularProgressIndicator(modifier = Modifier.size(22.dp), color = pal.blue, strokeWidth = 2.5.dp)
-                                Text("…", fontFamily = fonts.mono, fontWeight = FontWeight.Bold, fontSize = 22.sp, color = pal.ink2)
-                            }
-                            is RouteState.Ready -> {
-                                Text(
-                                    "${formatKm(ready!!.distance.distanceKm)} km",
-                                    fontFamily = fonts.mono, fontWeight = FontWeight.Bold, fontSize = 22.sp, color = pal.ink,
-                                )
-                                if (ready.distance.isEstimate) {
-                                    PamChip(Strings.CHIP_ESTIMATE, tone = PamTone.YELLOW, icon = PamIcons.SignalWifiOff)
-                                } else {
-                                    PamChip(Strings.CHIP_OSRM, tone = PamTone.GREEN, icon = PamIcons.Route)
+                        val ready = routeState as? RouteState.Ready
+                        // Guard the calculator's cap here too, so "Use this" can never hand
+                        // back a distance the calculator will silently reject.
+                        val tooFar = ready != null && ready.distance.distanceKm > MAX_DISTANCE_KM
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            // Spinner -> distance is the moment the screen resolves, so
+                            // it swaps rather than cuts. Keyed by state kind: a redrawn
+                            // route does not re-run the animation.
+                            AnimatedContent(
+                                targetState = routeState,
+                                transitionSpec = { pamSwap() },
+                                contentKey = { state ->
+                                    when (state) {
+                                        RouteState.Idle -> "idle"
+                                        RouteState.Loading -> "loading"
+                                        is RouteState.Ready -> "ready"
+                                    }
+                                },
+                                label = "routeReadout",
+                            ) { state ->
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    when (state) {
+                                        is RouteState.Loading -> {
+                                            CircularProgressIndicator(modifier = Modifier.size(22.dp), color = pal.blue, strokeWidth = 2.5.dp)
+                                            Text("…", fontFamily = fonts.mono, fontWeight = FontWeight.Bold, fontSize = 22.sp, color = pal.ink2)
+                                        }
+                                        is RouteState.Ready -> {
+                                            Text(
+                                                "${formatKm(state.distance.distanceKm)} km",
+                                                fontFamily = fonts.mono, fontWeight = FontWeight.Bold, fontSize = 22.sp, color = pal.ink,
+                                            )
+                                            if (state.distance.isEstimate) {
+                                                PamChip(Strings.CHIP_ESTIMATE, tone = PamTone.YELLOW, icon = PamIcons.SignalWifiOff)
+                                            } else {
+                                                PamChip(Strings.CHIP_OSRM, tone = PamTone.GREEN, icon = PamIcons.Route)
+                                            }
+                                        }
+                                        RouteState.Idle -> Text(
+                                            "—", fontFamily = fonts.mono, fontWeight = FontWeight.Bold, fontSize = 22.sp, color = pal.ink3,
+                                        )
+                                    }
                                 }
                             }
-                            RouteState.Idle -> Text(
-                                "—", fontFamily = fonts.mono, fontWeight = FontWeight.Bold, fontSize = 22.sp, color = pal.ink3,
+                            Spacer(Modifier.weight(1f))
+                            PamButton(
+                                if (ready != null) Strings.USE_DISTANCE else Strings.PICK_FIRST,
+                                onClick = { ready?.let { onUseDistance(it.distance) } },
+                                enabled = ready != null && !tooFar,
                             )
                         }
-                        Spacer(Modifier.weight(1f))
-                        PamButton(
-                            if (ready != null) Strings.USE_DISTANCE else Strings.PICK_FIRST,
-                            onClick = { ready?.let { onUseDistance(it.distance) } },
-                            enabled = ready != null && !tooFar,
-                        )
-                    }
-                    if (tooFar) {
-                        Text(
-                            Strings.TOO_FAR_NOTE,
-                            fontFamily = fonts.body, fontWeight = FontWeight.SemiBold, fontSize = 12.sp,
-                            color = pal.red, modifier = Modifier.padding(top = 6.dp),
-                        )
-                    } else if (ready?.usedFallback == true) {
-                        Text(
-                            Strings.MAP_ROUTE_FAILED,
-                            fontFamily = fonts.body, fontWeight = FontWeight.SemiBold, fontSize = 12.sp,
-                            color = pal.ink2, modifier = Modifier.padding(top = 6.dp),
-                        )
+                        // Notes unfold under the row instead of shoving it upward.
+                        AnimatedVisibility(visible = tooFar, enter = pamRevealEnter(), exit = pamRevealExit()) {
+                            Text(
+                                Strings.TOO_FAR_NOTE,
+                                fontFamily = fonts.body, fontWeight = FontWeight.SemiBold, fontSize = 12.sp,
+                                color = pal.red, modifier = Modifier.padding(top = 6.dp),
+                            )
+                        }
+                        AnimatedVisibility(
+                            visible = !tooFar && ready?.usedFallback == true,
+                            enter = pamRevealEnter(),
+                            exit = pamRevealExit(),
+                        ) {
+                            Text(
+                                Strings.MAP_ROUTE_FAILED,
+                                fontFamily = fonts.body, fontWeight = FontWeight.SemiBold, fontSize = 12.sp,
+                                color = pal.ink2, modifier = Modifier.padding(top = 6.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -365,11 +411,20 @@ private fun EndpointRow(
 @Composable
 private fun MarkerLayer(id: String, latLng: LatLng, color: androidx.compose.ui.graphics.Color) {
     val source = rememberGeoJsonSource(GeoJsonData.Features(Point(latLng.toPosition())))
+    // A pin that appears at full size looks pasted on; growing into place reads
+    // as the tap landing on the map.
+    var placed by remember(latLng) { mutableStateOf(false) }
+    LaunchedEffect(latLng) { placed = true }
+    val radius by animateDpAsState(
+        targetValue = if (placed) 10.dp else 2.dp,
+        animationSpec = PamMotion.bouncy(),
+        label = "markerRadius",
+    )
     CircleLayer(
         id = id,
         source = source,
         color = const(color),
-        radius = const(10.dp),
+        radius = const(radius),
         strokeColor = const(androidx.compose.ui.graphics.Color.White),
         strokeWidth = const(3.dp),
     )

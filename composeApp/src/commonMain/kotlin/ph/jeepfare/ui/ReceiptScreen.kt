@@ -1,5 +1,6 @@
 package ph.jeepfare.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,6 +42,8 @@ import ph.jeepfare.ui.components.ResiboRow
 import ph.jeepfare.ui.theme.LocalPamFonts
 import ph.jeepfare.ui.theme.LocalPamPalette
 import ph.jeepfare.ui.theme.PamIcons
+import ph.jeepfare.ui.theme.pamArriveEnter
+import ph.jeepfare.ui.theme.pamEnter
 
 @Composable
 fun ReceiptScreen(breakdown: FareBreakdown, party: TripParty, onBack: () -> Unit) {
@@ -50,7 +54,7 @@ fun ReceiptScreen(breakdown: FareBreakdown, party: TripParty, onBack: () -> Unit
     val dateLabel = remember { currentDateLabel() }
     var saved by remember { mutableStateOf(false) }
     // "Copied!" is transient feedback, not a permanent label change.
-    androidx.compose.runtime.LaunchedEffect(saved) {
+    LaunchedEffect(saved) {
         if (saved) {
             kotlinx.coroutines.delay(2000)
             saved = false
@@ -68,7 +72,7 @@ fun ReceiptScreen(breakdown: FareBreakdown, party: TripParty, onBack: () -> Unit
                 .padding(padding)
                 .verticalScroll(rememberScrollState()),
         ) {
-            PamTopBar(Strings.RECEIPT_TITLE, onBack = onBack)
+            PamTopBar(Strings.RECEIPT_TITLE, onBack = onBack, modifier = Modifier.pamEnter(index = 0))
             Column(
                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -76,19 +80,29 @@ fun ReceiptScreen(breakdown: FareBreakdown, party: TripParty, onBack: () -> Unit
                 PamStripe(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(3.dp)),
+                        .clip(RoundedCornerShape(3.dp))
+                        .pamEnter(index = 1),
                 )
-                Resibo(
-                    header = Strings.RESIBO_HEADER,
-                    sub = "${Strings.jeepneyTypeLong(breakdown.jeepneyType)} · ${formatKm(breakdown.distanceKm)} km",
-                    rows = allRows,
-                    dividerBeforeIndex = shiftedDivider,
-                    totalLabel = totalLabelFor(party),
-                    totalValue = breakdown.total.peso(),
-                    footer = Strings.RESIBO_FOOTER,
-                    pop = true,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                // The receipt is what this screen is for: it is handed to you,
+                // rising into place a beat after the header settles.
+                var receiptShown by remember { mutableStateOf(false) }
+                LaunchedEffect(Unit) { receiptShown = true }
+                AnimatedVisibility(visible = receiptShown, enter = pamArriveEnter()) {
+                    Resibo(
+                        header = Strings.RESIBO_HEADER,
+                        sub = "${Strings.jeepneyTypeLong(breakdown.jeepneyType)} · ${formatKm(breakdown.distanceKm)} km",
+                        rows = allRows,
+                        dividerBeforeIndex = shiftedDivider,
+                        totalLabel = totalLabelFor(party),
+                        totalValue = breakdown.total.peso(),
+                        footer = Strings.RESIBO_FOOTER,
+                        pop = true,
+                    )
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.pamEnter(index = 3),
+                ) {
                     PamButton(
                         Strings.SHARE,
                         onClick = { shareText(resiboShareText(breakdown, party, dateLabel)) },
@@ -111,7 +125,7 @@ fun ReceiptScreen(breakdown: FareBreakdown, party: TripParty, onBack: () -> Unit
                     Strings.RECEIPT_HINT,
                     fontFamily = fonts.body, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = pal.ink2,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp).pamEnter(index = 4),
                 )
                 Spacer(Modifier.height(12.dp))
             }

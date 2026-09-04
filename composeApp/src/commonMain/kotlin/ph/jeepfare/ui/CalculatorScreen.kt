@@ -1,5 +1,9 @@
 package ph.jeepfare.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -54,6 +58,12 @@ import ph.jeepfare.ui.theme.LocalPamFonts
 import ph.jeepfare.ui.theme.LocalPamPalette
 import ph.jeepfare.ui.theme.PamIcons
 import ph.jeepfare.ui.theme.PamTone
+import ph.jeepfare.ui.theme.pamArriveEnter
+import ph.jeepfare.ui.theme.pamArriveExit
+import ph.jeepfare.ui.theme.pamEnter
+import ph.jeepfare.ui.theme.pamRevealEnter
+import ph.jeepfare.ui.theme.pamRevealExit
+import ph.jeepfare.ui.theme.pamSwap
 
 enum class DistanceInputMode { MAP, MANUAL }
 
@@ -127,7 +137,7 @@ fun CalculatorScreen(
                 .imePadding()
                 .verticalScroll(rememberScrollState()),
         ) {
-            PamHeroTopBar {
+            PamHeroTopBar(modifier = Modifier.pamEnter(index = 0)) {
                 // Spec: a single trailing action (theme toggle). The Rates screen is
                 // reached via the tappable LTFRB note at the bottom of this screen.
                 PamIconButton(
@@ -141,7 +151,7 @@ fun CalculatorScreen(
                 modifier = Modifier.padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                PamCard(overline = Strings.OVERLINE_JEEP) {
+                PamCard(overline = Strings.OVERLINE_JEEP, modifier = Modifier.pamEnter(index = 1)) {
                     PamSegmented(
                         items = listOf(
                             PamSegmentItem(
@@ -158,7 +168,7 @@ fun CalculatorScreen(
                     )
                 }
 
-                PamCard(overline = Strings.OVERLINE_DISTANCE) {
+                PamCard(overline = Strings.OVERLINE_DISTANCE, modifier = Modifier.pamEnter(index = 2)) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         PamSegmented(
                             items = listOf(
@@ -168,14 +178,26 @@ fun CalculatorScreen(
                             selected = inputMode,
                             onSelect = onInputModeChange,
                         )
-                        when (inputMode) {
-                            DistanceInputMode.MAP -> MapDistanceSection(mapDistance, onPickOnMap)
-                            DistanceInputMode.MANUAL -> ManualDistanceSection(manualKmText, manualKm, onManualKmTextChange)
+                        // The tab body grows and shrinks between the two modes; a
+                        // plain swap would make the card snap to a new height.
+                        AnimatedContent(
+                            targetState = inputMode,
+                            transitionSpec = { pamSwap(upward = targetState == DistanceInputMode.MANUAL) },
+                            label = "distanceMode",
+                        ) { mode ->
+                            // Same 12dp rhythm the card used before the wrapper.
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                when (mode) {
+                                    DistanceInputMode.MAP -> MapDistanceSection(mapDistance, onPickOnMap)
+                                    DistanceInputMode.MANUAL ->
+                                        ManualDistanceSection(manualKmText, manualKm, onManualKmTextChange)
+                                }
+                            }
                         }
                     }
                 }
 
-                PamCard(overline = Strings.OVERLINE_FARE_TYPE) {
+                PamCard(overline = Strings.OVERLINE_FARE_TYPE, modifier = Modifier.pamEnter(index = 3)) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         PamChoiceGrid(
                             items = PassengerType.entries.map { type ->
@@ -199,6 +221,7 @@ fun CalculatorScreen(
                 }
 
                 CompanionsCard(
+                    modifier = Modifier.pamEnter(index = 4),
                     party = party,
                     expanded = showCompanions,
                     onToggle = {
@@ -213,32 +236,49 @@ fun CalculatorScreen(
                     onCompanionCountChange = onCompanionCountChange,
                 )
 
-                PamOverline(Strings.OVERLINE_BREAKDOWN)
+                PamOverline(Strings.OVERLINE_BREAKDOWN, Modifier.pamEnter(index = 5))
 
-                if (breakdown != null) {
-                    val (rows, dividerAt) = resiboRows(breakdown, party)
-                    Resibo(
-                        header = Strings.RESIBO_HEADER,
-                        sub = "${Strings.jeepneyTypeLong(jeepneyType)} · ${formatKm(breakdown.distanceKm)} km",
-                        rows = rows,
-                        dividerBeforeIndex = dividerAt,
-                        totalLabel = totalLabelFor(party),
-                        totalValue = breakdown.total.peso(),
-                        footer = Strings.RESIBO_FOOTER,
-                    )
-                    PamButton(
-                        Strings.SHARE_RESIBO,
-                        onClick = { onShare(breakdown) },
-                        icon = PamIcons.Share,
-                        size = PamButtonSize.LG,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                } else {
-                    Text(
-                        Strings.ENTER_DISTANCE_PROMPT,
-                        fontFamily = fonts.body, fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
-                        color = pal.ink2,
-                    )
+                // The receipt is the payoff of the whole screen, so it arrives as
+                // one object — rising and settling — instead of blinking into
+                // existence the instant a distance parses. Keying the content on
+                // "is there a fare at all" means edits to an existing fare update
+                // the receipt in place, and only appearing/disappearing animates.
+                AnimatedContent(
+                    targetState = breakdown,
+                    transitionSpec = {
+                        val enter = if (targetState != null) pamArriveEnter() else pamRevealEnter()
+                        (enter togetherWith pamArriveExit()).using(SizeTransform(clip = false))
+                    },
+                    contentKey = { it != null },
+                    label = "breakdown",
+                ) { current ->
+                    if (current != null) {
+                        val (rows, dividerAt) = resiboRows(current, party)
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Resibo(
+                                header = Strings.RESIBO_HEADER,
+                                sub = "${Strings.jeepneyTypeLong(jeepneyType)} · ${formatKm(current.distanceKm)} km",
+                                rows = rows,
+                                dividerBeforeIndex = dividerAt,
+                                totalLabel = totalLabelFor(party),
+                                totalValue = current.total.peso(),
+                                footer = Strings.RESIBO_FOOTER,
+                            )
+                            PamButton(
+                                Strings.SHARE_RESIBO,
+                                onClick = { onShare(current) },
+                                icon = PamIcons.Share,
+                                size = PamButtonSize.LG,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    } else {
+                        Text(
+                            Strings.ENTER_DISTANCE_PROMPT,
+                            fontFamily = fonts.body, fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
+                            color = pal.ink2,
+                        )
+                    }
                 }
 
                 Text(
@@ -246,6 +286,7 @@ fun CalculatorScreen(
                     fontFamily = fonts.body, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = pal.ink2,
                     modifier = Modifier
                         .align(Alignment.CenterHorizontally)
+                        .pamEnter(index = 6)
                         .clickable(onClick = onOpenRates)
                         .padding(4.dp),
                 )
@@ -265,21 +306,31 @@ private fun CompanionsCard(
     expanded: Boolean,
     onToggle: () -> Unit,
     onCompanionCountChange: (PassengerType, Int) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val pal = LocalPamPalette.current
     val fonts = LocalPamFonts.current
-    PamCard(overline = Strings.OVERLINE_COMPANIONS) {
+    PamCard(overline = Strings.OVERLINE_COMPANIONS, modifier = modifier) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    if (party.companionCount > 0) {
-                        Strings.COMPANIONS_CHIP.replace("%d", party.companionCount.toString())
-                    } else {
-                        Strings.COMPANIONS_HINT
-                    },
-                    fontFamily = fonts.body, fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
-                    color = pal.ink2, modifier = Modifier.weight(1f),
-                )
+                val summary = if (party.companionCount > 0) {
+                    Strings.COMPANIONS_CHIP.replace("%d", party.companionCount.toString())
+                } else {
+                    Strings.COMPANIONS_HINT
+                }
+                // "Just me" -> "2 companions" slides rather than flickers.
+                AnimatedContent(
+                    targetState = summary,
+                    transitionSpec = { pamSwap() },
+                    modifier = Modifier.weight(1f),
+                    label = "companionSummary",
+                ) { text ->
+                    Text(
+                        text,
+                        fontFamily = fonts.body, fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+                        color = pal.ink2,
+                    )
+                }
                 PamButton(
                     if (expanded) Strings.HIDE_COMPANIONS else Strings.ADD_COMPANIONS,
                     onClick = onToggle,
@@ -288,7 +339,11 @@ private fun CompanionsCard(
                     size = PamButtonSize.SM,
                 )
             }
-            if (expanded) {
+            AnimatedVisibility(
+                visible = expanded,
+                enter = pamRevealEnter(),
+                exit = pamRevealExit(),
+            ) {
                 Column {
                     PassengerType.entries.forEachIndexed { index, type ->
                         if (index > 0) HorizontalDivider(thickness = 1.5.dp, color = pal.line)
